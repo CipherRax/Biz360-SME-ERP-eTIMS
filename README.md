@@ -150,8 +150,10 @@ Config: `OUTBOX_WORKER_ENABLED`, `OUTBOX_POLL_INTERVAL_MS`, `OUTBOX_BATCH_SIZE`.
 ## Phase 2+ preview
 
 Entities ready in the schema: `Organization`, `OrganizationSetting` (billing/preferences),
-`ApiKey` (eTIMS), `OutboxEvent` (async workers, live). Planned: items/inventory, sales,
-KRA eTIMS invoice submission, idempotent receipt of KRA responses.
+`ApiKey` (eTIMS), `OutboxEvent` (async workers, live). Planned: purchasing approvals,
+multi-currency, quotes, credit management, XBRL filing. KRA eTIMS `live` mode,
+idempotent webhook receipt of KRA responses, and shipped notification templates
+(live mail handler) land once real credentials are configured.
 
 ## License
 
