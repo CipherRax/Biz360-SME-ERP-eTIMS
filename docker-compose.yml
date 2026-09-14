@@ -1,0 +1,46 @@
+name: sme-erp
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: erp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-erp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-erp_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-erp}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-erp} -d ${POSTGRES_DB:-erp}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks: [erp]
+
+  redis:
+    image: redis:8-alpine
+    container_name: erp-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [erp]
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  erp:
+    driver: bridge
