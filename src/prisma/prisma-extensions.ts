@@ -36,6 +36,11 @@ const TENANT_MODELS = new Set<Prisma.ModelName>([
   Prisma.ModelName.UnitOfMeasure,
   Prisma.ModelName.Item,
   Prisma.ModelName.Party,
+  Prisma.ModelName.SaleInvoice,
+  Prisma.ModelName.SaleInvoiceLine,
+  Prisma.ModelName.Payment,
+  Prisma.ModelName.InvoiceNumberSeq,
+  Prisma.ModelName.StockMovement,
 ]);
 
 /** Models that record `createdBy` / `updatedBy` actor ids. */
@@ -45,6 +50,8 @@ const AUDITED_MODELS = new Set<Prisma.ModelName>([
   Prisma.ModelName.UnitOfMeasure,
   Prisma.ModelName.Item,
   Prisma.ModelName.Party,
+  Prisma.ModelName.SaleInvoice,
+  Prisma.ModelName.Payment,
 ]);
 
 type Jsonish = Record<string, unknown>;

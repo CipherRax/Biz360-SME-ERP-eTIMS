@@ -57,6 +57,35 @@ enum PartyStatus {
   INACTIVE
 }
 
+/// Sales documents. `INVOICE` is the eTIMS "0" sale; `CREDIT_NOTE` reverses it.
+enum InvoiceType {
+  INVOICE
+  CREDIT_NOTE
+}
+
+enum InvoiceStatus {
+  DRAFT
+  CONFIRMED
+  PARTIALLY_PAID
+  PAID
+  VOID
+}
+
+enum PaymentMethod {
+  CASH
+  M_PESA
+  BANK_TRANSFER
+  CARD
+  CHEQUE
+}
+
+enum StockMovementType {
+  ADJUSTMENT
+  PURCHASE_IN
+  SALE_OUT
+  VOID
+}
+
 // ----------------------------- Organization --------------------------------
 
 /// Tenant root. Every business entity belongs to exactly one organization.
@@ -85,6 +114,11 @@ model Organization {
   unitsOfMeasure          UnitOfMeasure[]
   items                   Item[]
   parties                 Party[]
+  saleInvoices            SaleInvoice[]
+  saleInvoiceLines        SaleInvoiceLine[]
+  payments                Payment[]
+  invoiceNumberSeqs       InvoiceNumberSeq[]
+  stockMovements          StockMovement[]
 
   @@map("organizations")
 }
@@ -132,6 +166,7 @@ model User {
   emailVerificationTokens EmailVerificationToken[]
   passwordResetTokens     PasswordResetToken[]
   auditLogs               AuditLog[]
+  paymentsReceived        Payment[]
 
   @@index([organizationId])
   @@index([createdAt])
@@ -336,12 +371,17 @@ model Item {
   sellPrice      Decimal?      @db.Decimal(18, 2)
   // KRA eTIMS VAT/excise classification when invoicing (e.g. "1" = standard).
   taxCode        String?
+  // Services (labour, transport) do not move stock.
+  trackStock     Boolean       @default(true)
   stockOnHand    Decimal       @default(0) @db.Decimal(18, 3)
   reorderLevel   Decimal?      @db.Decimal(18, 3)
   active         Boolean       @default(true)
   deletedAt      DateTime?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
+
+  saleLines SaleInvoiceLine[]
+  stockMovements StockMovement[]
 
   @@unique([organizationId, sku])
   @@index([organizationId])
@@ -379,8 +419,137 @@ model Party {
   createdBy         String?
   updatedBy         String?
 
+  saleInvoices SaleInvoice[]
+  payments     Payment[]
+
   @@unique([organizationId, taxId])
   @@index([organizationId])
   @@index([organizationId, type])
   @@map("parties")
+}
+
+// -------------------------------- Sales --------------------------------------
+
+/// Financial documents are immutable: they are never hard-deleted. `VOID`
+/// reverses a document; stock movements only happen on CONFIRM / VOID.
+model SaleInvoice {
+  id              String        @id @default(uuid())
+  organizationId  String
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoiceNumber   String
+  type            InvoiceType   @default(INVOICE)
+  partyId         String
+  party           Party         @relation(fields: [partyId], references: [id])
+  invoiceDate     DateTime      @default(now())
+  dueDate         DateTime?
+  status          InvoiceStatus @default(DRAFT)
+  subtotal        Decimal       @default(0) @db.Decimal(18, 2)
+  discountTotal   Decimal       @default(0) @db.Decimal(18, 2)
+  taxTotal        Decimal       @default(0) @db.Decimal(18, 2)
+  total           Decimal       @default(0) @db.Decimal(18, 2)
+  amountPaid      Decimal       @default(0) @db.Decimal(18, 2)
+  currency        String        @default("KES")
+  notes           String?
+  // eTIMS (KRA) submission results — set by the submission worker.
+  etimsCtrlNo     String?
+  etimsReceipt    String?
+  etimsSubmittedAt DateTime?
+  voidedAt        DateTime?
+  voidReason      String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  createdBy       String?
+  updatedBy       String?
+
+  lines    SaleInvoiceLine[]
+  payments Payment[]
+
+  @@unique([organizationId, invoiceNumber])
+  @@index([organizationId, status])
+  @@index([organizationId, partyId])
+  @@index([organizationId, invoiceDate])
+  @@map("sale_invoices")
+}
+
+model SaleInvoiceLine {
+  id            String        @id @default(uuid())
+  organizationId String
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoiceId     String
+  invoice       SaleInvoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  itemId        String?
+  item          Item?         @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  description   String
+  quantity      Decimal       @default(1) @db.Decimal(18, 3)
+  unitPrice     Decimal       @default(0) @db.Decimal(18, 2)
+  taxRate       Decimal       @default(0) @db.Decimal(5, 2)
+  discountPct   Decimal       @default(0) @db.Decimal(5, 2)
+  lineDiscount  Decimal       @default(0) @db.Decimal(18, 2)
+  lineAmount    Decimal       @default(0) @db.Decimal(18, 2)
+  lineTotal     Decimal       @default(0) @db.Decimal(18, 2)
+  taxAmount     Decimal       @default(0) @db.Decimal(18, 2)
+  sortOrder     Int           @default(0)
+
+  @@index([invoiceId])
+  @@index([itemId])
+  @@index([organizationId])
+  @@map("sale_invoice_lines")
+}
+
+/// Receipt against an invoice (and, in a later milestone, purchase invoices).
+model Payment {
+  id             String        @id @default(uuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  partyId        String
+  party          Party         @relation(fields: [partyId], references: [id])
+  invoiceId      String?
+  invoice        SaleInvoice?  @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  amount         Decimal       @db.Decimal(18, 2)
+  method         PaymentMethod @default(CASH)
+  reference      String?
+  paidAt         DateTime      @default(now())
+  receivedById   String?
+  receivedBy     User?         @relation(fields: [receivedById], references: [id])
+  notes          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  createdBy      String?
+
+  @@index([organizationId, paidAt])
+  @@index([partyId])
+  @@index([invoiceId])
+  @@map("payments")
+}
+
+/// Per-organization invoice number sequences. The sales service reserves the
+/// next number atomically (increment) so numbering is gap-safe and race-free.
+model InvoiceNumberSeq {
+  id             String       @id @default(uuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  value          Int          @default(0)
+
+  @@map("invoice_number_seqs")
+}
+
+/// Append-only ledger of stock changes. Positive quantity = stock in,
+/// negative = stock out. `referenceId` links to a sale invoice, purchase
+/// document, or is null for a manual adjustment.
+model StockMovement {
+  id             String            @id @default(uuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  itemId         String
+  item           Item              @relation(fields: [itemId], references: [id])
+  quantity       Decimal           @db.Decimal(18, 3)
+  type           StockMovementType
+  reason         String?
+  referenceId    String?
+  userId         String?
+  createdAt      DateTime          @default(now())
+
+  @@index([itemId, createdAt(sort: Desc)])
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@map("stock_movements")
 }

@@ -121,6 +121,8 @@ npx tsc --noEmit      # typecheck
 | API keys   | `POST /api-keys` (ADMIN), `GET /api-keys` (ADMIN), `DELETE /api-keys/:id` (ADMIN) |
 | Inventory  | `GET/POST /items`, `GET/PATCH/DELETE /items/:id` (write: ADMIN/MANAGER), `GET/POST /items/categories`, `DELETE /items/categories/:id`, `GET/POST /items/units`, `DELETE /items/units/:id` |
 | Parties    | `GET/POST /parties`, `GET/PATCH/DELETE /parties/:id` (write: ADMIN/MANAGER/ACCOUNTANT), filter `?type=CUSTOMER\|SUPPLIER\|BOTH&status=ACTIVE` |
+| Sales      | `GET/POST /invoices`, `GET/PATCH /invoices/:id`, `POST /invoices/:id/confirm`, `POST /invoices/:id/void`, `POST /invoices/payments` (writes: ADMIN/MANAGER/ACCOUNTANT) — confirm decrements stock, void restores it, payments track receivables |
+| Stock      | `POST /items/:id/stock`, `GET /items/:id/stock/movements` (write: ADMIN/MANAGER) — append-only movement ledger |
 
 ## Utility scripts
 

@@ -22,6 +22,7 @@ import { Roles } from '../../common/decorators/roles.decorator.js';
 import { Audit } from '../../common/decorators/audit.decorator.js';
 import { InventoryService } from './inventory.service.js';
 import { ItemDto } from './dto/item.dto.js';
+import { AdjustStockDto } from './dto/stock.dto.js';
 
 @ApiTags('inventory')
 @Controller('items')
@@ -88,5 +89,28 @@ export class ItemsController {
   ) {
     this.require(user);
     await this.inventory.removeItem(user.orgId, id);
+  }
+
+  @Post(':id/stock')
+  @Roles(Role.ADMIN, Role.MANAGER)
+  @Audit('StockMovement')
+  adjustStock(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: AdjustStockDto,
+  ) {
+    this.require(user);
+    return this.inventory.adjustStock(user.orgId, id, dto, user.sub);
+  }
+
+  @Get(':id/stock/movements')
+  movements(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query('limit', new ParseIntPipe({ optional: true })) limit = 50,
+    @Query('cursor') cursor?: string,
+  ) {
+    this.require(user);
+    return this.inventory.stockMovements(user.orgId, id, limit, cursor);
   }
 }

@@ -1,6 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { ItemDto } from './dto/item.dto.js';
 import { CreateCategoryDto, CreateUnitOfMeasureDto } from './dto/reference.dto.js';
+import { AdjustStockDto } from './dto/stock.dto.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 
 const ITEM_SAFE_FIELDS = {
@@ -221,6 +222,84 @@ export class InventoryService {
     await this.prisma.client.unitOfMeasure.update({
       where: { id: unitId },
       data: { deletedAt: new Date() },
+    });
+  }
+
+  // ----------------------------- stock --------------------------------------
+
+  /**
+   * Adjust physical stock, recording an append-only StockMovement. A negative
+   * quantity that would push stock below zero is rejected.
+   */
+  async adjustStock(
+    organizationId: string,
+    itemId: string,
+    dto: AdjustStockDto,
+    userId: string,
+    type: 'ADJUSTMENT' = 'ADJUSTMENT',
+  ) {
+    const delta = Number.parseFloat(dto.quantity);
+    if (!Number.isFinite(delta) || delta === 0) {
+      throw new ConflictException('Stock adjustment quantity must be a non-zero number');
+    }
+
+    return this.prisma.client.$transaction(async (tx) => {
+      const item = await tx.item.findFirst({
+        where: { id: itemId, organizationId },
+        select: { id: true, stockOnHand: true, trackStock: true },
+      });
+      if (!item) throw new NotFoundException('Item not found');
+
+      const onHand = Number(item.stockOnHand);
+      const newOnHand = onHand + delta;
+      if (newOnHand < 0) {
+        throw new ConflictException(
+          `Insufficient stock: on hand ${onHand}, adjustment ${delta} would leave ${newOnHand}`,
+        );
+      }
+
+      const movement = await tx.stockMovement.create({
+        data: {
+          organizationId,
+          itemId,
+          quantity: delta.toString(),
+          type,
+          reason: dto.reason ?? null,
+          userId,
+        },
+        select: { id: true, quantity: true, type: true, reason: true, createdAt: true },
+      });
+
+      const updated = await tx.item.update({
+        where: { id: itemId },
+        data: { stockOnHand: newOnHand.toString() },
+        select: { stockOnHand: true },
+      });
+
+      return { movement, stockOnHand: updated.stockOnHand };
+    });
+  }
+
+  stockMovements(
+    organizationId: string,
+    itemId: string,
+    limit: number,
+    cursor?: string,
+  ) {
+    return this.prisma.client.stockMovement.findMany({
+      where: { organizationId, itemId },
+      select: {
+        id: true,
+        quantity: true,
+        type: true,
+        reason: true,
+        referenceId: true,
+        userId: true,
+        createdAt: true,
+      },
+      take: Math.min(limit, 100),
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      orderBy: { createdAt: 'desc' },
     });
   }
 }
