@@ -45,6 +45,18 @@ enum OutboxEventStatus {
   FAILED
 }
 
+/// A counterparty can be a customer, a supplier, or both.
+enum PartyType {
+  CUSTOMER
+  SUPPLIER
+  BOTH
+}
+
+enum PartyStatus {
+  ACTIVE
+  INACTIVE
+}
+
 // ----------------------------- Organization --------------------------------
 
 /// Tenant root. Every business entity belongs to exactly one organization.
@@ -72,6 +84,7 @@ model Organization {
   itemCategories          ItemCategory[]
   unitsOfMeasure          UnitOfMeasure[]
   items                   Item[]
+  parties                 Party[]
 
   @@map("organizations")
 }
@@ -334,4 +347,40 @@ model Item {
   @@index([organizationId])
   @@index([categoryId])
   @@map("items")
+}
+
+// ------------------------------- Parties -------------------------------------
+
+/// Customer and supplier records (single table, discriminated by `type`).
+/// `taxId` is the KRA PIN — the natural key for eTIMS invoicing.
+model Party {
+  id                String       @id @default(uuid())
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  type              PartyType    @default(CUSTOMER)
+  name              String
+  email             String?
+  phone             String?
+  taxId             String?
+  website           String?
+  addressLine1      String?
+  addressLine2      String?
+  city              String?
+  state             String?
+  country           String       @default("KE")
+  postalCode        String?
+  creditLimit       Decimal?     @db.Decimal(18, 2)
+  paymentTermsDays  Int          @default(30)
+  notes             String?
+  status            PartyStatus  @default(ACTIVE)
+  deletedAt         DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  createdBy         String?
+  updatedBy         String?
+
+  @@unique([organizationId, taxId])
+  @@index([organizationId])
+  @@index([organizationId, type])
+  @@map("parties")
 }
