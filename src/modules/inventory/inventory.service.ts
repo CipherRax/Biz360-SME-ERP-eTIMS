@@ -3,6 +3,7 @@ import { ItemDto } from './dto/item.dto.js';
 import { CreateCategoryDto, CreateUnitOfMeasureDto } from './dto/reference.dto.js';
 import { AdjustStockDto } from './dto/stock.dto.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
+import { round2, sum } from '../../common/helpers/money.js';
 
 const ITEM_SAFE_FIELDS = {
   id: true,
@@ -298,6 +299,137 @@ export class InventoryService {
         createdAt: true,
       },
       take: Math.min(limit, 100),
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /* -------------------------- stock reporting ----------------------------- */
+  /* ----------------------------------------------------------------------- */
+  /*  Stock summary with valuation                                           */
+  /*  ---------------------------------------------------------------------- */
+
+  async stockSummary(
+    organizationId: string,
+    categoryId?: string,
+    limit = 200,
+  ) {
+    const items = await this.prisma.client.item.findMany({
+      where: {
+        organizationId,
+        ...(categoryId ? { categoryId } : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        sku: true,
+        categoryId: true,
+        buyPrice: true,
+        sellPrice: true,
+        stockOnHand: true,
+        reorderLevel: true,
+        active: true,
+        category: { select: { id: true, name: true } },
+      },
+      orderBy: { name: 'asc' },
+      take: Math.min(limit, 1000),
+    });
+
+    // Weighted-average unit cost from confirmed purchases (fallback when
+    // buyPrice is unset).
+    const itemIds = items.map((i) => i.id);
+    const purchaseLines = itemIds.length
+      ? await this.prisma.client.purchaseInvoiceLine.findMany({
+          where: {
+            organizationId,
+            itemId: { in: itemIds, not: null },
+            invoice: {
+              status: { in: ['CONFIRMED', 'PARTIALLY_PAID', 'PAID'] },
+            },
+          },
+          select: { itemId: true, quantity: true, unitPrice: true },
+        })
+      : [];
+    const costByItem = new Map<string, number>();
+    const qtyByItem = new Map<string, number>();
+    for (const pl of purchaseLines) {
+      const itemId = pl.itemId;
+      if (!itemId) continue;
+      const qty = Number(pl.quantity);
+      costByItem.set(itemId, (costByItem.get(itemId) ?? 0) + qty * Number(pl.unitPrice));
+      qtyByItem.set(itemId, (qtyByItem.get(itemId) ?? 0) + qty);
+    }
+    const unitCostOf = (item: (typeof items)[number]): number => {
+      if (item.buyPrice != null) return Number(item.buyPrice);
+      const qty = qtyByItem.get(item.id) ?? 0;
+      if (qty > 0) return round2((costByItem.get(item.id) ?? 0) / qty);
+      return item.buyPrice != null ? Number(item.buyPrice) : 0;
+    };
+
+    const lines = items.map((item) => {
+      const stockOnHand = Number(item.stockOnHand);
+      const unitCost = unitCostOf(item);
+      return {
+        itemId: item.id,
+        name: item.name,
+        sku: item.sku,
+        category: item.category?.name ?? null,
+        stockOnHand,
+        unitCost,
+        valuation: round2(stockOnHand * unitCost),
+        reorderLevel: Number(item.reorderLevel ?? 0),
+        lowStock: item.stockOnHand != null && stockOnHand <= Number(item.reorderLevel ?? 0),
+      };
+    });
+
+    return {
+      items: lines,
+      totals: {
+        items: lines.length,
+        units: sum(lines.map((l) => l.stockOnHand)),
+        valuation: sum(lines.map((l) => l.valuation)),
+      },
+    };
+  }
+
+  /* ----------------------------------------------------------------------- */
+  /*  Movement report (across all items, optionally filtered)                 */
+  /* ----------------------------------------------------------------------- */
+
+  allMovements(
+    organizationId: string,
+    filters: {
+      itemId?: string;
+      type?: string;
+      from?: string;
+      to?: string;
+    },
+    limit: number,
+    cursor?: string,
+  ) {
+    const where: Record<string, unknown> = { organizationId };
+    if (filters.itemId) where.itemId = filters.itemId;
+    if (filters.type) where.type = filters.type;
+    if (filters.from || filters.to) {
+      where.createdAt = {
+        ...(filters.from ? { gte: new Date(filters.from) } : {}),
+        ...(filters.to ? { lte: new Date(filters.to) } : {}),
+      };
+    }
+    return this.prisma.client.stockMovement.findMany({
+      where,
+      select: {
+        id: true,
+        itemId: true,
+        item: { select: { id: true, name: true, sku: true } },
+        quantity: true,
+        type: true,
+        reason: true,
+        referenceId: true,
+        userId: true,
+        createdAt: true,
+      },
+      take: Math.min(limit, 200),
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
       orderBy: { createdAt: 'desc' },
     });
