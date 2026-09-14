@@ -118,6 +118,9 @@ model Organization {
   saleInvoiceLines        SaleInvoiceLine[]
   payments                Payment[]
   invoiceNumberSeqs       InvoiceNumberSeq[]
+  purchaseInvoices        PurchaseInvoice[]
+  purchaseInvoiceLines    PurchaseInvoiceLine[]
+  purchaseInvoiceSeqs     PurchaseInvoiceSeq[]
   stockMovements          StockMovement[]
 
   @@map("organizations")
@@ -381,6 +384,7 @@ model Item {
   updatedAt      DateTime      @updatedAt
 
   saleLines SaleInvoiceLine[]
+  purchaseLines PurchaseInvoiceLine[]
   stockMovements StockMovement[]
 
   @@unique([organizationId, sku])
@@ -421,6 +425,7 @@ model Party {
 
   saleInvoices SaleInvoice[]
   payments     Payment[]
+  purchaseInvoices PurchaseInvoice[]
 
   @@unique([organizationId, taxId])
   @@index([organizationId])
@@ -462,7 +467,7 @@ model SaleInvoice {
   updatedBy       String?
 
   lines    SaleInvoiceLine[]
-  payments Payment[]
+  payments Payment[] @relation("SaleInvoicePayments")
 
   @@unique([organizationId, invoiceNumber])
   @@index([organizationId, status])
@@ -496,29 +501,33 @@ model SaleInvoiceLine {
   @@map("sale_invoice_lines")
 }
 
-/// Receipt against an invoice (and, in a later milestone, purchase invoices).
+/// Receipt / payment — linked to either a sale or purchase invoice (but not both).
 model Payment {
-  id             String        @id @default(uuid())
-  organizationId String
-  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  partyId        String
-  party          Party         @relation(fields: [partyId], references: [id])
-  invoiceId      String?
-  invoice        SaleInvoice?  @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  amount         Decimal       @db.Decimal(18, 2)
-  method         PaymentMethod @default(CASH)
-  reference      String?
-  paidAt         DateTime      @default(now())
-  receivedById   String?
-  receivedBy     User?         @relation(fields: [receivedById], references: [id])
-  notes          String?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  createdBy      String?
+  id               String        @id @default(uuid())
+  organizationId   String
+  organization     Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  partyId          String
+  party            Party         @relation(fields: [partyId], references: [id])
+  // Link to the sale OR purchase invoice (exactly one set).
+  invoiceId        String?
+  invoice          SaleInvoice?  @relation("SaleInvoicePayments", fields: [invoiceId], references: [id], onDelete: SetNull)
+  purchaseInvoiceId String?
+  purchaseInvoice  PurchaseInvoice? @relation("PurchaseInvoicePayments", fields: [purchaseInvoiceId], references: [id], onDelete: SetNull)
+  amount           Decimal       @db.Decimal(18, 2)
+  method           PaymentMethod @default(CASH)
+  reference        String?
+  paidAt           DateTime      @default(now())
+  receivedById     String?
+  receivedBy       User?         @relation(fields: [receivedById], references: [id])
+  notes            String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  createdBy        String?
 
   @@index([organizationId, paidAt])
   @@index([partyId])
   @@index([invoiceId])
+  @@index([purchaseInvoiceId])
   @@map("payments")
 }
 
@@ -552,4 +561,82 @@ model StockMovement {
   @@index([itemId, createdAt(sort: Desc)])
   @@index([organizationId, createdAt(sort: Desc)])
   @@map("stock_movements")
+}
+
+// ------------------------------ Purchasing ----------------------------------
+
+/// Supplier bill. Reuses the sales `InvoiceStatus` flow and the `Payment`
+/// table (accounts payable). Confirming increments stock (PURCHASE_IN).
+model PurchaseInvoice {
+  id             String        @id @default(uuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoiceNumber  String
+  supplierRef    String?
+  partyId        String
+  party          Party         @relation(fields: [partyId], references: [id])
+  invoiceDate    DateTime      @default(now())
+  dueDate        DateTime?
+  status         InvoiceStatus @default(DRAFT)
+  subtotal       Decimal       @default(0) @db.Decimal(18, 2)
+  discountTotal  Decimal       @default(0) @db.Decimal(18, 2)
+  taxTotal       Decimal       @default(0) @db.Decimal(18, 2)
+  total          Decimal       @default(0) @db.Decimal(18, 2)
+  amountPaid     Decimal       @default(0) @db.Decimal(18, 2)
+  currency       String        @default("KES")
+  notes          String?
+  // eTIMS (KRA) received-invoice results — set by the submission worker.
+  etimsCtrlNo    String?
+  etimsReceipt   String?
+  etimsSubmittedAt DateTime?
+  voidedAt       DateTime?
+  voidReason     String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  createdBy      String?
+  updatedBy      String?
+
+  lines    PurchaseInvoiceLine[]
+  payments Payment[] @relation("PurchaseInvoicePayments")
+
+  @@unique([organizationId, invoiceNumber])
+  @@index([organizationId, status])
+  @@index([organizationId, partyId])
+  @@index([organizationId, invoiceDate])
+  @@map("purchase_invoices")
+}
+
+model PurchaseInvoiceLine {
+  id             String            @id @default(uuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoiceId      String
+  invoice        PurchaseInvoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  itemId         String?
+  item           Item?             @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  description    String
+  quantity       Decimal           @default(1) @db.Decimal(18, 3)
+  unitPrice      Decimal           @default(0) @db.Decimal(18, 2)
+  taxRate        Decimal           @default(0) @db.Decimal(5, 2)
+  discountPct    Decimal           @default(0) @db.Decimal(5, 2)
+  lineDiscount   Decimal           @default(0) @db.Decimal(18, 2)
+  lineAmount     Decimal           @default(0) @db.Decimal(18, 2)
+  lineTotal      Decimal           @default(0) @db.Decimal(18, 2)
+  taxAmount      Decimal           @default(0) @db.Decimal(18, 2)
+  sortOrder      Int               @default(0)
+
+  @@index([invoiceId])
+  @@index([itemId])
+  @@index([organizationId])
+  @@map("purchase_invoice_lines")
+}
+
+/// Per-organization purchase invoice number sequences.
+model PurchaseInvoiceSeq {
+  id             String       @id @default(uuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  value          Int          @default(0)
+
+  @@map("purchase_invoice_seqs")
 }
