@@ -10,6 +10,7 @@ import {
   Prisma,
 } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
+import { OutboxService } from '../../events/outbox/outbox.service.js';
 import {
   CreateInvoiceDto,
   InvoiceLineDto,
@@ -135,7 +136,10 @@ function computeLine(
 
 @Injectable()
 export class SalesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly outbox: OutboxService,
+  ) {}
 
   /* ----------------------------------------------------------------------- */
   /*  Numbering                                                               */
@@ -334,7 +338,7 @@ export class SalesService {
         });
       }
 
-      return tx.saleInvoice.update({
+      const updated = await tx.saleInvoice.update({
         where: { id: invoiceId },
         data: {
           status: 'CONFIRMED',
@@ -346,6 +350,20 @@ export class SalesService {
           party: { select: { id: true, name: true } },
         },
       });
+
+      // Register the KRA submission in the same transaction as the confirm.
+      await this.outbox.enqueue(tx, {
+        type: 'ETIMS_INVOICE_SUBMIT',
+        aggregateType: 'SaleInvoice',
+        aggregateId: invoiceId,
+        organizationId,
+        payload: {
+          invoiceId,
+          invoiceNumber: invoice.invoiceNumber,
+        },
+      });
+
+      return updated;
     });
   }
 
@@ -371,7 +389,10 @@ export class SalesService {
         throw new ConflictException(`Cannot void an invoice in ${invoice.status} status`);
       }
 
-      if (invoice.status === 'CONFIRMED' || invoice.status === 'PARTIALLY_PAID') {
+      const wasReleased =
+        invoice.status === 'CONFIRMED' || invoice.status === 'PARTIALLY_PAID';
+
+      if (wasReleased) {
         // Reverse stock.
         for (const line of invoice.lines) {
           if (!line.itemId) continue;
@@ -397,7 +418,7 @@ export class SalesService {
         }
       }
 
-      return tx.saleInvoice.update({
+      const voided = await tx.saleInvoice.update({
         where: { id: invoiceId },
         data: {
           status: 'VOID',
@@ -410,6 +431,22 @@ export class SalesService {
           party: { select: { id: true, name: true } },
         },
       });
+
+      // Reversing a released invoice is a credit note in KRA's eyes.
+      if (wasReleased) {
+        await this.outbox.enqueue(tx, {
+          type: 'ETIMS_CREDIT_NOTE_SUBMIT',
+          aggregateType: 'SaleInvoice',
+          aggregateId: invoiceId,
+          organizationId,
+          payload: {
+            invoiceId,
+            invoiceNumber: invoice.invoiceNumber,
+          },
+        });
+      }
+
+      return voided;
     });
   }
 

@@ -11,6 +11,7 @@ import {
   redisConfig,
   throttlerConfig,
   outboxConfig,
+  etimsConfig,
 } from './config/configuration.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { CommonModule } from './common/common.module.js';
@@ -21,6 +22,7 @@ import { InventoryModule } from './modules/inventory/inventory.module.js';
 import { PartiesModule } from './modules/parties/parties.module.js';
 import { SalesModule } from './modules/sales/sales.module.js';
 import { PurchasingModule } from './modules/purchasing/purchasing.module.js';
+import { EtimsModule } from './modules/etims/etims.module.js';
 import { HealthModule } from './health/health.module.js';
 import { EventsModule } from './events/events.module.js';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
@@ -35,7 +37,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
       isGlobal: true,
       envFilePath: ['.env', '.env.local'],
       validationSchema: envValidationSchema,
-      load: [appConfig, authConfig, redisConfig, throttlerConfig, outboxConfig],
+      load: [appConfig, authConfig, redisConfig, throttlerConfig, outboxConfig, etimsConfig],
     }),
     LoggerModule.forRoot({
       pinoHttp: {
@@ -75,6 +77,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
     PartiesModule,
     SalesModule,
     PurchasingModule,
+    EtimsModule,
     HealthModule,
     CommonModule,
   ],

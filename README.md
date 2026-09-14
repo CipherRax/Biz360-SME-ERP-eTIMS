@@ -122,7 +122,8 @@ npx tsc --noEmit      # typecheck
 | Inventory  | `GET/POST /items`, `GET/PATCH/DELETE /items/:id` (write: ADMIN/MANAGER), `GET/POST /items/categories`, `DELETE /items/categories/:id`, `GET/POST /items/units`, `DELETE /items/units/:id` |
 | Parties    | `GET/POST /parties`, `GET/PATCH/DELETE /parties/:id` (write: ADMIN/MANAGER/ACCOUNTANT), filter `?type=CUSTOMER\|SUPPLIER\|BOTH&status=ACTIVE` |
 | Sales      | `GET/POST /invoices`, `GET/PATCH /invoices/:id`, `POST /invoices/:id/confirm`, `POST /invoices/:id/void`, `POST /invoices/payments` (writes: ADMIN/MANAGER/ACCOUNTANT) — confirm decrements stock, void restores it, payments track receivables |
-| Stock      | `POST /items/:id/stock`, `GET /items/:id/stock/movements` (write: ADMIN/MANAGER) — append-only movement ledger |
+| Stock      | `POST /items/:id/stock`, `GET /items/:id/stock/movements`, `GET /inventory/stock/summary`, `GET /inventory/stock/movements` (write: ADMIN/MANAGER) — append-only movement ledger, valuation at cost, low-stock flags, org totals |
+| eTIMS      | `GET /etims/status`, `POST /etims/sales/:id/trigger` (write: ADMIN/MANAGER/ACCOUNTANT) — confirm enqueues KRA E-TIMS submission via the outbox; `ETIMS_MODE=mock` (default) synthesizes receipts offline, `live` speaks the KRA TMS API; voiding a released invoice enqueues a credit note |
 
 ## Utility scripts
 

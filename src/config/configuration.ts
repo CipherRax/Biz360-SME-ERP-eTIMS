@@ -43,3 +43,14 @@ export const outboxConfig = registerAs('outbox', () => ({
   pollIntervalMs: parseInt(process.env.OUTBOX_POLL_INTERVAL_MS ?? '5000', 10),
   batchSize: parseInt(process.env.OUTBOX_BATCH_SIZE ?? '10', 10),
 }));
+
+export const etimsConfig = registerAs('etims', () => ({
+  /** 'mock' synthesizes KRA responses without network I/O (default & dev/test). */
+  mode: process.env.ETIMS_MODE ?? 'mock',
+  baseUrl: process.env.ETIMS_BASE_URL ?? 'https://preprod-tims.kra.go.ke',
+  clientId: process.env.ETIMS_CLIENT_ID ?? '',
+  clientSecret: process.env.ETIMS_CLIENT_SECRET ?? '',
+  taxpayerPin: process.env.ETIMS_TAXPAYER_PIN ?? '',
+  deviceSerial: process.env.ETIMS_DEVICE_SERIAL ?? '',
+  timeoutMs: parseInt(process.env.ETIMS_TIMEOUT_MS ?? '10000', 10),
+}));

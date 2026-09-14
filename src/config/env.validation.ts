@@ -34,10 +34,17 @@ export const envValidationSchema = Joi.object({
   SMTP_PASS: Joi.string().allow('').optional(),
   MAIL_FROM: Joi.string().default('SME ERP <noreply@example.com>'),
 
-  // eTIMS (used from Phase 4)
+  // eTIMS (KRA)
   ETIMS_ENV: Joi.string().valid('sandbox', 'production').default('sandbox'),
   ETIMS_CERT_PATH: Joi.string().allow('').optional(),
   ETIMS_CERT_PASSPHRASE: Joi.string().allow('').optional(),
+  ETIMS_MODE: Joi.string().valid('mock', 'live').default('mock'),
+  ETIMS_BASE_URL: Joi.string().uri().default('https://preprod-tims.kra.go.ke'),
+  ETIMS_CLIENT_ID: Joi.string().allow('').optional(),
+  ETIMS_CLIENT_SECRET: Joi.string().allow('').optional(),
+  ETIMS_TAXPAYER_PIN: Joi.string().allow('').optional(),
+  ETIMS_DEVICE_SERIAL: Joi.string().allow('').optional(),
+  ETIMS_TIMEOUT_MS: Joi.number().integer().positive().default(10000),
 
   // Outbox worker
   OUTBOX_WORKER_ENABLED: Joi.boolean().default(true),

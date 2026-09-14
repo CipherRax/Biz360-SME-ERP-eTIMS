@@ -456,15 +456,18 @@ model SaleInvoice {
   currency        String        @default("KES")
   notes           String?
   // eTIMS (KRA) submission results — set by the submission worker.
-  etimsCtrlNo     String?
-  etimsReceipt    String?
+etimsCtrlNo    String?
+  etimsReceipt   String?
   etimsSubmittedAt DateTime?
-  voidedAt        DateTime?
-  voidReason      String?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  createdBy       String?
-  updatedBy       String?
+  etimsCreditCtrlNo String?
+  etimsCreditReceipt String?
+  etimsCreditSubmittedAt DateTime?
+  voidedAt       DateTime?
+  voidReason     String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  createdBy      String?
+  updatedBy      String?
 
   lines    SaleInvoiceLine[]
   payments Payment[] @relation("SaleInvoicePayments")
