@@ -124,6 +124,7 @@ npx tsc --noEmit      # typecheck
 | Sales      | `GET/POST /invoices`, `GET/PATCH /invoices/:id`, `POST /invoices/:id/confirm`, `POST /invoices/:id/void`, `POST /invoices/payments` (writes: ADMIN/MANAGER/ACCOUNTANT) — confirm decrements stock, void restores it, payments track receivables |
 | Stock      | `POST /items/:id/stock`, `GET /items/:id/stock/movements`, `GET /inventory/stock/summary`, `GET /inventory/stock/movements` (write: ADMIN/MANAGER) — append-only movement ledger, valuation at cost, low-stock flags, org totals |
 | eTIMS      | `GET /etims/status`, `POST /etims/sales/:id/trigger` (write: ADMIN/MANAGER/ACCOUNTANT) — confirm enqueues KRA E-TIMS submission via the outbox; `ETIMS_MODE=mock` (default) synthesizes receipts offline, `live` speaks the KRA TMS API; voiding a released invoice enqueues a credit note |
+| Reporting  | `GET /reports/sales/summary`, `GET /reports/receivables`, `GET /reports/payables`, `GET /reports/top-items`, `GET /reports/dashboard` (any authenticated) — daily sales totals, open receivables/payables by party, top-selling items, KPIs (sales today/this month, stock valuation, low-stock and unsubmitted-eTIMS counts) |
 
 ## Utility scripts
 

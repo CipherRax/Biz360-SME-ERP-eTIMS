@@ -23,6 +23,7 @@ import { PartiesModule } from './modules/parties/parties.module.js';
 import { SalesModule } from './modules/sales/sales.module.js';
 import { PurchasingModule } from './modules/purchasing/purchasing.module.js';
 import { EtimsModule } from './modules/etims/etims.module.js';
+import { ReportingModule } from './modules/reporting/reporting.module.js';
 import { HealthModule } from './health/health.module.js';
 import { EventsModule } from './events/events.module.js';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
@@ -78,6 +79,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
     SalesModule,
     PurchasingModule,
     EtimsModule,
+    ReportingModule,
     HealthModule,
     CommonModule,
   ],
