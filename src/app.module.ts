@@ -17,6 +17,7 @@ import { CommonModule } from './common/common.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 import { ApiKeysModule } from './modules/api-keys/api-keys.module.js';
+import { InventoryModule } from './modules/inventory/inventory.module.js';
 import { HealthModule } from './health/health.module.js';
 import { EventsModule } from './events/events.module.js';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
@@ -67,6 +68,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
     AuthModule,
     UsersModule,
     ApiKeysModule,
+    InventoryModule,
     HealthModule,
     CommonModule,
   ],

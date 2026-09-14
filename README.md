@@ -119,6 +119,7 @@ npx tsc --noEmit      # typecheck
 | Sessions   | `GET /auth/sessions`, `DELETE /auth/sessions/:id`, `DELETE /auth/sessions` |
 | Users      | `GET /users` (ADMIN/MANAGER/ACCOUNTANT), `GET /users/me`, `GET /users/:id`, `PATCH /users/me`, `POST /users` (ADMIN), `PATCH /users/:id` (ADMIN), `DELETE /users/:id` (ADMIN) |
 | API keys   | `POST /api-keys` (ADMIN), `GET /api-keys` (ADMIN), `DELETE /api-keys/:id` (ADMIN) |
+| Inventory  | `GET/POST /items`, `GET/PATCH/DELETE /items/:id` (write: ADMIN/MANAGER), `GET/POST /items/categories`, `DELETE /items/categories/:id`, `GET/POST /items/units`, `DELETE /items/units/:id` |
 
 ## Utility scripts
 

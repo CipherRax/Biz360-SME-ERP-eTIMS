@@ -15,6 +15,9 @@ const SOFT_DELETE_MODELS = new Set<Prisma.ModelName>([
   Prisma.ModelName.Organization,
   Prisma.ModelName.OrganizationSetting,
   Prisma.ModelName.User,
+  Prisma.ModelName.ItemCategory,
+  Prisma.ModelName.UnitOfMeasure,
+  Prisma.ModelName.Item,
 ]);
 
 /** Models whose rows are scoped to a tenant via `organizationId`. */
@@ -28,10 +31,18 @@ const TENANT_MODELS = new Set<Prisma.ModelName>([
   Prisma.ModelName.OutboxEvent,
   Prisma.ModelName.IdempotencyKey,
   Prisma.ModelName.ApiKey,
+  Prisma.ModelName.ItemCategory,
+  Prisma.ModelName.UnitOfMeasure,
+  Prisma.ModelName.Item,
 ]);
 
 /** Models that record `createdBy` / `updatedBy` actor ids. */
-const AUDITED_MODELS = new Set<Prisma.ModelName>([Prisma.ModelName.User]);
+const AUDITED_MODELS = new Set<Prisma.ModelName>([
+  Prisma.ModelName.User,
+  Prisma.ModelName.ItemCategory,
+  Prisma.ModelName.UnitOfMeasure,
+  Prisma.ModelName.Item,
+]);
 
 type Jsonish = Record<string, unknown>;
 type OpArgs = { where?: Jsonish; data?: Jsonish; create?: Jsonish };

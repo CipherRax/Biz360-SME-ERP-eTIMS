@@ -69,6 +69,9 @@ model Organization {
   apiKeys                 ApiKey[]
   emailVerificationTokens EmailVerificationToken[]
   passwordResetTokens     PasswordResetToken[]
+  itemCategories          ItemCategory[]
+  unitsOfMeasure          UnitOfMeasure[]
+  items                   Item[]
 
   @@map("organizations")
 }
@@ -265,4 +268,70 @@ model ApiKey {
 
   @@index([organizationId])
   @@map("api_keys")
+}
+
+// ------------------------------ Inventory -----------------------------------
+
+/// Product catalog grouping, e.g. "Beverages" or "Hardware".
+model ItemCategory {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  active         Boolean      @default(true)
+  deletedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  items Item[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("item_categories")
+}
+
+/// Reference unit of measure, e.g. "piece" (pcs), "kilogram" (kg), "litre" (l).
+model UnitOfMeasure {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  symbol         String
+  deletedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, symbol])
+  @@index([organizationId])
+  @@map("units_of_measure")
+}
+
+/// Sellable/stockable product. `sku` is unique per organization; `stockOnHand`
+/// is denormalized and will be driven by stock movements in the inventory phase.
+model Item {
+  id             String        @id @default(uuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  sku            String?
+  description    String?
+  categoryId     String?
+  category       ItemCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  baseUnit       String        @default("pcs")
+  buyPrice       Decimal?      @db.Decimal(18, 2)
+  sellPrice      Decimal?      @db.Decimal(18, 2)
+  // KRA eTIMS VAT/excise classification when invoicing (e.g. "1" = standard).
+  taxCode        String?
+  stockOnHand    Decimal       @default(0) @db.Decimal(18, 3)
+  reorderLevel   Decimal?      @db.Decimal(18, 3)
+  active         Boolean       @default(true)
+  deletedAt      DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([organizationId, sku])
+  @@index([organizationId])
+  @@index([categoryId])
+  @@map("items")
 }
