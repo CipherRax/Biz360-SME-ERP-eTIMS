@@ -10,12 +10,15 @@ import {
   authConfig,
   redisConfig,
   throttlerConfig,
+  outboxConfig,
 } from './config/configuration.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { CommonModule } from './common/common.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { UsersModule } from './modules/users/users.module.js';
+import { ApiKeysModule } from './modules/api-keys/api-keys.module.js';
 import { HealthModule } from './health/health.module.js';
+import { EventsModule } from './events/events.module.js';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
 import { RolesGuard } from './common/guards/roles.guard.js';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor.js';
@@ -28,7 +31,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
       isGlobal: true,
       envFilePath: ['.env', '.env.local'],
       validationSchema: envValidationSchema,
-      load: [appConfig, authConfig, redisConfig, throttlerConfig],
+      load: [appConfig, authConfig, redisConfig, throttlerConfig, outboxConfig],
     }),
     LoggerModule.forRoot({
       pinoHttp: {
@@ -60,8 +63,10 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
       },
     ]),
     PrismaModule,
+    EventsModule,
     AuthModule,
     UsersModule,
+    ApiKeysModule,
     HealthModule,
     CommonModule,
   ],

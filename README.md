@@ -28,9 +28,15 @@ Built with **NestJS 12**, **Prisma 7**, **PostgreSQL**, and **Valkey/Redis**.
 - **Refresh token rotation** — every refresh issues a new token in the same family
   and revokes the old row. Reuse/expiry of a rotated token revokes the **entire family**
   (theft detection).
-- **Outbox pattern** — side effects (e.g. email verification) are written to
-  `outbox_events` in the same transaction as the primary write; a worker (later phase)
-  publishes them. No external calls happen inline.
+- **Outbox pattern** — side effects (email verification, password reset, and
+  later eTIMS submissions/webhooks) are written to `outbox_events` inside the
+  same transaction as the primary write. An **outbox worker** polls the table
+  and dispatches to registered handlers with at-least-once semantics: atomic
+  row claiming (safe for multiple instances), exponential backoff, and a hard
+  failure state after max attempts.
+- **API keys** — orgs expose machine-readable credentials (`erp_…`, hashed at
+  rest) for eTIMS / webhook / external clients. Admin-managed with scopes and
+  optional expiry.
 - **RBAC** — `Role` enum (`ADMIN`, `MANAGER`, `ACCOUNTANT`, `STAFF`, `READ_ONLY`)
   enforced via guards, e.g. `@Roles(Role.ADMIN)`.
 - **Audit trail** — `@Audit('User')` records actor/action/entity metadata to
@@ -112,6 +118,7 @@ npx tsc --noEmit      # typecheck
 | Auth       | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `POST /auth/verify-email`, `POST /auth/password/forgot`, `POST /auth/password/reset`, `GET /auth/me` |
 | Sessions   | `GET /auth/sessions`, `DELETE /auth/sessions/:id`, `DELETE /auth/sessions` |
 | Users      | `GET /users` (ADMIN/MANAGER/ACCOUNTANT), `GET /users/me`, `GET /users/:id`, `PATCH /users/me`, `POST /users` (ADMIN), `PATCH /users/:id` (ADMIN), `DELETE /users/:id` (ADMIN) |
+| API keys   | `POST /api-keys` (ADMIN), `GET /api-keys` (ADMIN), `DELETE /api-keys/:id` (ADMIN) |
 
 ## Utility scripts
 
@@ -121,10 +128,23 @@ npx tsc --noEmit      # typecheck
 ./scripts/dev-server.sh start|stop|restart|status
 ```
 
+## Outbox worker
+
+`src/events/` implements an at-least-once dispatcher:
+
+- `OutboxService.enqueue(tx, …)` — write a pending event inside your transaction.
+- `OutboxWorker` — polls due rows (atomic PENDING→PROCESSING claim), dispatches
+  to a handler, marks `DONE` on success, retries with exponential backoff,
+  `FAILED` at `maxAttempts`.
+- Register a handler per `OutboxEventType` (see `NotificationHandlerRegistrar`
+  for the placeholder mail handler — swap in nodemailer/Resend when SMTP is set).
+
+Config: `OUTBOX_WORKER_ENABLED`, `OUTBOX_POLL_INTERVAL_MS`, `OUTBOX_BATCH_SIZE`.
+
 ## Phase 2+ preview
 
 Entities ready in the schema: `Organization`, `OrganizationSetting` (billing/preferences),
-`ApiKey` (eTIMS), `OutboxEvent` (async workers). Planned: items/inventory, sales,
+`ApiKey` (eTIMS), `OutboxEvent` (async workers, live). Planned: items/inventory, sales,
 KRA eTIMS invoice submission, idempotent receipt of KRA responses.
 
 ## License

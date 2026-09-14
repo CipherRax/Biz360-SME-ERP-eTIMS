@@ -39,6 +39,11 @@ export const envValidationSchema = Joi.object({
   ETIMS_CERT_PATH: Joi.string().allow('').optional(),
   ETIMS_CERT_PASSPHRASE: Joi.string().allow('').optional(),
 
+  // Outbox worker
+  OUTBOX_WORKER_ENABLED: Joi.boolean().default(true),
+  OUTBOX_POLL_INTERVAL_MS: Joi.number().integer().positive().default(5000),
+  OUTBOX_BATCH_SIZE: Joi.number().integer().positive().default(10),
+
   // Throttler
   THROTTLE_TTL: Joi.number().integer().positive().default(60),
   THROTTLE_LIMIT: Joi.number().integer().positive().default(100),

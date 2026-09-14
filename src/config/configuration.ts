@@ -37,3 +37,9 @@ export const throttlerConfig = registerAs('throttler', () => ({
   ttl: parseInt(process.env.THROTTLE_TTL ?? '60', 10),
   limit: parseInt(process.env.THROTTLE_LIMIT ?? '100', 10),
 }));
+
+export const outboxConfig = registerAs('outbox', () => ({
+  enabled: (process.env.OUTBOX_WORKER_ENABLED ?? 'true') === 'true',
+  pollIntervalMs: parseInt(process.env.OUTBOX_POLL_INTERVAL_MS ?? '5000', 10),
+  batchSize: parseInt(process.env.OUTBOX_BATCH_SIZE ?? '10', 10),
+}));
