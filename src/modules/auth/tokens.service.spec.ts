@@ -47,7 +47,7 @@ describe('TokensService', () => {
   });
 
   it('parses ttl strings to seconds', () => {
-    const svc = makeService() as TokensService & {
+    const svc = makeService() as unknown as {
       parseTtlToSeconds: (ttl: string) => number;
     };
     expect(svc.parseTtlToSeconds('1s')).toBe(1);
@@ -57,7 +57,7 @@ describe('TokensService', () => {
   });
 
   it('falls back to 30 days for malformed ttl values', () => {
-    const svc = makeService() as TokensService & {
+    const svc = makeService() as unknown as {
       parseTtlToSeconds: (ttl: string) => number;
     };
     expect(svc.parseTtlToSeconds('garbage')).toBe(30 * 24 * 3600);

@@ -2,8 +2,9 @@ import { CallHandler, ExecutionContext } from '@nestjs/common';
 import { of, lastValueFrom } from 'rxjs';
 import { describe, expect, it } from 'vitest';
 import { TransformInterceptor } from './transform.interceptor.js';
+import type { ResponseEnvelope } from '../helpers/response-envelope.js';
 
-function run(data: unknown): Promise<Record<string, unknown>> {
+function run(data: unknown): Promise<ResponseEnvelope<unknown>> {
   const context = {} as ExecutionContext;
   const next: CallHandler<unknown> = { handle: () => of(data) };
   return lastValueFrom(new TransformInterceptor().intercept(context, next));
