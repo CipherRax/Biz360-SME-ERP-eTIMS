@@ -23,6 +23,7 @@ import {
   sum,
   toAmount,
 } from '../../common/helpers/money.js';
+import { LedgerService } from '../accounting/ledger.service.js';
 
 /* -------------------------------------------------------------------------- */
 /*  Safe field projections                                                    */
@@ -139,6 +140,7 @@ export class SalesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly outbox: OutboxService,
+    private readonly ledger: LedgerService,
   ) {}
 
   /* ----------------------------------------------------------------------- */
@@ -363,6 +365,13 @@ export class SalesService {
         },
       });
 
+      await this.ledger.postSaleInvoice(tx, organizationId, {
+        id: invoiceId,
+        invoiceNumber: invoice.invoiceNumber,
+        total: invoice.total,
+        taxTotal: invoice.taxTotal,
+      }, userId);
+
       return updated;
     });
   }
@@ -444,6 +453,13 @@ export class SalesService {
             invoiceNumber: invoice.invoiceNumber,
           },
         });
+
+        await this.ledger.postSaleVoid(tx, organizationId, {
+          id: invoiceId,
+          invoiceNumber: invoice.invoiceNumber,
+          total: invoice.total,
+          taxTotal: invoice.taxTotal,
+        }, userId);
       }
 
       return voided;
@@ -498,7 +514,7 @@ export class SalesService {
     return this.prisma.client.$transaction(async (tx) => {
       const invoice = await tx.saleInvoice.findFirst({
         where: { id: dto.invoiceId, organizationId },
-        select: { id: true, partyId: true, total: true, amountPaid: true, status: true, currency: true },
+        select: { id: true, invoiceNumber: true, partyId: true, total: true, amountPaid: true, status: true, currency: true },
       });
       if (!invoice) throw new NotFoundException('Invoice not found');
       if (!(['CONFIRMED', 'PARTIALLY_PAID'] as InvoiceStatus[]).includes(invoice.status)) {
@@ -535,6 +551,12 @@ export class SalesService {
           updatedBy: userId,
         },
       });
+
+      await this.ledger.postSalePayment(tx, organizationId, {
+        id: payment.id,
+        invoiceNumber: invoice.invoiceNumber,
+        amount,
+      }, userId);
 
       return payment;
     });

@@ -19,6 +19,7 @@ const SOFT_DELETE_MODELS = new Set<Prisma.ModelName>([
   Prisma.ModelName.UnitOfMeasure,
   Prisma.ModelName.Item,
   Prisma.ModelName.Party,
+  Prisma.ModelName.Account,
 ]);
 
 /** Models whose rows are scoped to a tenant via `organizationId`. */
@@ -44,6 +45,10 @@ const TENANT_MODELS = new Set<Prisma.ModelName>([
   Prisma.ModelName.PurchaseInvoice,
   Prisma.ModelName.PurchaseInvoiceLine,
   Prisma.ModelName.PurchaseInvoiceSeq,
+  Prisma.ModelName.Account,
+  Prisma.ModelName.JournalEntry,
+  Prisma.ModelName.JournalEntryLine,
+  Prisma.ModelName.JournalEntrySeq,
 ]);
 
 /** Models that record `createdBy` / `updatedBy` actor ids. */
@@ -57,6 +62,8 @@ const AUDITED_MODELS = new Set<Prisma.ModelName>([
   Prisma.ModelName.Payment,
   Prisma.ModelName.PurchaseInvoice,
   Prisma.ModelName.PurchaseInvoiceLine,
+  Prisma.ModelName.Account,
+  Prisma.ModelName.JournalEntry,
 ]);
 
 type Jsonish = Record<string, unknown>;

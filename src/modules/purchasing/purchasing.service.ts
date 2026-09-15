@@ -22,6 +22,7 @@ import {
   sum,
   toAmount,
 } from '../../common/helpers/money.js';
+import { LedgerService } from '../accounting/ledger.service.js';
 
 /* -------------------------------------------------------------------------- */
 /*  Safe field projections                                                    */
@@ -134,7 +135,10 @@ function computeLine(
 
 @Injectable()
 export class PurchasingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ledger: LedgerService,
+  ) {}
 
   private async allocateNumber(
     organizationId: string,
@@ -316,7 +320,7 @@ export class PurchasingService {
         });
       }
 
-      return tx.purchaseInvoice.update({
+      const updated = await tx.purchaseInvoice.update({
         where: { id: purchaseId },
         data: { status: 'CONFIRMED', dueDate, updatedBy: userId },
         include: {
@@ -324,6 +328,15 @@ export class PurchasingService {
           party: { select: { id: true, name: true } },
         },
       });
+
+      await this.ledger.postPurchaseInvoice(tx, organizationId, {
+        id: purchaseId,
+        invoiceNumber: purchase.invoiceNumber,
+        total: purchase.total,
+        taxTotal: purchase.taxTotal,
+      }, userId);
+
+      return updated;
     });
   }
 
@@ -347,7 +360,10 @@ export class PurchasingService {
         throw new ConflictException(`Cannot void a purchase in ${purchase.status} status`);
       }
 
-      if (purchase.status === 'CONFIRMED' || purchase.status === 'PARTIALLY_PAID') {
+      const wasReleased =
+        purchase.status === 'CONFIRMED' || purchase.status === 'PARTIALLY_PAID';
+
+      if (wasReleased) {
         for (const line of purchase.lines) {
           if (!line.itemId) continue;
           const item = await tx.item.findFirst({
@@ -377,7 +393,7 @@ export class PurchasingService {
         }
       }
 
-      return tx.purchaseInvoice.update({
+      const voided = await tx.purchaseInvoice.update({
         where: { id: purchaseId },
         data: {
           status: 'VOID',
@@ -390,6 +406,17 @@ export class PurchasingService {
           party: { select: { id: true, name: true } },
         },
       });
+
+      if (wasReleased) {
+        await this.ledger.postPurchaseVoid(tx, organizationId, {
+          id: purchaseId,
+          invoiceNumber: purchase.invoiceNumber,
+          total: purchase.total,
+          taxTotal: purchase.taxTotal,
+        }, userId);
+      }
+
+      return voided;
     });
   }
 
@@ -442,7 +469,7 @@ export class PurchasingService {
     return this.prisma.client.$transaction(async (tx) => {
       const purchase = await tx.purchaseInvoice.findFirst({
         where: { id: dto.purchaseInvoiceId, organizationId },
-        select: { id: true, partyId: true, total: true, amountPaid: true, status: true, currency: true },
+        select: { id: true, invoiceNumber: true, partyId: true, total: true, amountPaid: true, status: true, currency: true },
       });
       if (!purchase) throw new NotFoundException('Purchase not found');
       if (!(['CONFIRMED', 'PARTIALLY_PAID'] as InvoiceStatus[]).includes(purchase.status)) {
@@ -480,6 +507,12 @@ export class PurchasingService {
           updatedBy: userId,
         },
       });
+
+      await this.ledger.postPurchasePayment(tx, organizationId, {
+        id: payment.id,
+        invoiceNumber: purchase.invoiceNumber,
+        amount,
+      }, userId);
 
       return payment;
     });

@@ -86,6 +86,36 @@ enum StockMovementType {
   VOID
 }
 
+/// Classification of ledger accounts in the chart of accounts.
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  INCOME
+  EXPENSE
+}
+
+/// DRAFT = not yet affecting reports; POSTED = live in the ledger; REVERSED =
+/// a posted entry that was cancelled (the reversal itself is a POSTED entry).
+enum JournalEntryStatus {
+  DRAFT
+  POSTED
+  REVERSED
+}
+
+/// Where an entry came from. Auto-generated entries are immutable and tagged
+/// with both `sourceType` and `sourceId` for full audit traceability.
+enum JournalSourceType {
+  MANUAL
+  SALE_INVOICE
+  SALE_PAYMENT
+  SALE_VOID
+  PURCHASE_INVOICE
+  PURCHASE_PAYMENT
+  PURCHASE_VOID
+  REVERSAL
+}
+
 // ----------------------------- Organization --------------------------------
 
 /// Tenant root. Every business entity belongs to exactly one organization.
@@ -122,6 +152,10 @@ model Organization {
   purchaseInvoiceLines    PurchaseInvoiceLine[]
   purchaseInvoiceSeqs     PurchaseInvoiceSeq[]
   stockMovements          StockMovement[]
+  accounts                Account[]
+  journalEntries          JournalEntry[]
+  journalEntryLines       JournalEntryLine[]
+  journalEntrySeqs        JournalEntrySeq[]
 
   @@map("organizations")
 }
@@ -642,4 +676,98 @@ model PurchaseInvoiceSeq {
   value          Int          @default(0)
 
   @@map("purchase_invoice_seqs")
+}
+
+// ------------------------------ Accounting ----------------------------------
+
+/// Chart of accounts. `type` drives the normal balance side (ASSET/EXPENSE 💸
+/// debit, LIABILITY/EQUITY/INCOME credit) and the financial report grouping.
+/// Seeded automatically for every tenant at registration.
+model Account {
+  id             String      @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  name           String
+  type           AccountType
+  parentId       String?
+  parent         Account?    @relation("AccountTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children       Account[]   @relation("AccountTree")
+  description    String?
+  active         Boolean     @default(true)
+  deletedAt      DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  createdBy      String?
+  updatedBy      String?
+
+  journalLines JournalEntryLine[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([parentId])
+  @@map("accounts")
+}
+
+/// General ledger entry. Double-entry: every entry is a balanced set of
+/// `JournalEntryLine`s (enforced by a DB trigger in the migration). Financial
+/// documents are immutable: auto-generated entries are created POSTED and can
+/// only be cancelled via a reversing entry.
+model JournalEntry {
+  id             String             @id @default(uuid())
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  entryNumber    String
+  entryDate      DateTime           @default(now())
+  status         JournalEntryStatus @default(DRAFT)
+  sourceType     JournalSourceType  @default(MANUAL)
+  sourceId       String?
+  description    String?
+  // The POSTED entry this entry reverses (null for normal entries).
+  reversalOfId   String?          @unique
+  reversalOf     JournalEntry?    @relation("JournalReversal", fields: [reversalOfId], references: [id], onDelete: SetNull)
+  // The reversing entry (set on the original once cancelled).
+  reversedBy     JournalEntry?    @relation("JournalReversal")
+  approvedBy     String?
+  approvedAt     DateTime?
+  createdBy      String?
+  updatedBy      String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  lines JournalEntryLine[]
+
+  @@unique([organizationId, entryNumber])
+  @@index([organizationId, status])
+  @@index([organizationId, entryDate])
+  @@index([sourceType, sourceId])
+  @@map("journal_entries")
+}
+
+model JournalEntryLine {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  entryId        String
+  entry          JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  accountId      String
+  account        Account      @relation(fields: [accountId], references: [id])
+  debit          Decimal      @default(0) @db.Decimal(18, 2)
+  credit         Decimal      @default(0) @db.Decimal(18, 2)
+  memo           String?
+
+  @@index([entryId])
+  @@index([accountId])
+  @@index([organizationId])
+  @@map("journal_entry_lines")
+}
+
+/// Per-organization journal entry number sequences (JE-YYYY-XXXXXX).
+model JournalEntrySeq {
+  id             String       @id @default(uuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  value          Int          @default(0)
+
+  @@map("journal_entry_seqs")
 }

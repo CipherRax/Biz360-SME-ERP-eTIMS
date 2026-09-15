@@ -16,6 +16,7 @@ import { LoginDto } from './dto/login.dto.js';
 import { DeviceContext } from './dto/device-context.js';
 import { OutboxService } from '../../events/outbox/outbox.service.js';
 import { slugify } from '../../common/helpers/slugify.js';
+import { seedChartOfAccounts } from '../accounting/chart-of-accounts.js';
 
 const VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
@@ -112,6 +113,8 @@ export class AuthService {
           devVerificationToken = rawToken;
         }
       }
+
+      await seedChartOfAccounts(tx, organization.id, user.id);
 
       return { organizationId: organization.id, userId: user.id };
     });
