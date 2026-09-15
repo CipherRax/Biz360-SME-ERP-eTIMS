@@ -154,6 +154,8 @@ describe('eTIMS submission (e2e)', () => {
       .expect(200);
     expect(status.body.data.mode).toBe('mock');
     expect(status.body.data.unsubmittedInvoices).toBe(0);
+    expect(status.body.data.deviceSerialConfigured).toBe(false);
+    expect(status.body.data.liveReady).toBe(false);
   });
 
   it('voiding a released invoice enqueues a credit note submission', async () => {

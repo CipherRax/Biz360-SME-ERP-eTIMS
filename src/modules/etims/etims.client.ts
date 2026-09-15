@@ -48,6 +48,24 @@ export class EtimsClient {
     return this.config.get<string>('etims.mode') === 'mock';
   }
 
+  /** Missing configuration that would make a live submission fail mid-flight. */
+  liveConfigErrors(): string[] {
+    if (this.isMock()) return [];
+    const required: Array<[string, string]> = [
+      ['etims.baseUrl', 'ETIMS_BASE_URL'],
+      ['etims.clientId', 'ETIMS_CLIENT_ID'],
+      ['etims.clientSecret', 'ETIMS_CLIENT_SECRET'],
+      ['etims.deviceSerial', 'ETIMS_DEVICE_SERIAL'],
+    ];
+    return required
+      .filter(([key]) => !this.config.get<string>(key))
+      .map(([, envName]) => envName);
+  }
+
+  liveReady(): boolean {
+    return !this.isMock() && this.liveConfigErrors().length === 0;
+  }
+
   private baseUrl(): string {
     return this.config.get<string>('etims.baseUrl')!;
   }
@@ -82,6 +100,10 @@ export class EtimsClient {
   }
 
   private async submitLive(payload: Record<string, unknown>): Promise<EtimsReceipt> {
+    const errors = this.liveConfigErrors();
+    if (errors.length > 0) {
+      throw new Error(`eTIMS live mode is misconfigured: missing ${errors.join(', ')}`);
+    }
     const token = await this.acquireToken();
     const res = await fetch(`${this.baseUrl()}/v1/etims/invoice`, {
       method: 'POST',

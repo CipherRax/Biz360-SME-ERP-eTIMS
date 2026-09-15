@@ -15,6 +15,7 @@ import { Roles } from '../../common/decorators/roles.decorator.js';
 import { Audit } from '../../common/decorators/audit.decorator.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { OutboxService } from '../../events/outbox/outbox.service.js';
+import { EtimsClient } from './etims.client.js';
 
 @ApiTags('etims')
 @ApiBearerAuth()
@@ -24,6 +25,7 @@ export class EtimsController {
     private readonly prisma: PrismaService,
     private readonly outbox: OutboxService,
     private readonly config: ConfigService,
+    private readonly etimsClient: EtimsClient,
   ) {}
 
   /** Compliance status: operating mode + how many taxable docs are unsent. */
@@ -48,13 +50,15 @@ export class EtimsController {
     const taxpayerPinConfigured = Boolean(
       this.config.get<string>('etims.taxpayerPin') || org?.taxPin,
     );
+    const configErrors = this.etimsClient.liveConfigErrors();
+    if (!org?.taxPin) configErrors.push('organization.taxPin');
     return {
       mode,
       taxpayerPinConfigured,
+      deviceSerialConfigured: Boolean(this.config.get<string>('etims.deviceSerial')),
+      orgTaxPinPresent: Boolean(org?.taxPin),
       liveReady:
-        mode === 'live' &&
-        Boolean(this.config.get<string>('etims.clientId')) &&
-        Boolean(this.config.get<string>('etims.clientSecret')),
+        mode === 'live' && configErrors.length === 0,
       unsubmittedInvoices: unsubmitted,
     };
   }

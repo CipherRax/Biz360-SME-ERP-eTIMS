@@ -81,6 +81,22 @@ export class EtimsHandlerRegistrar {
     });
     if (!org) throw new Error('Organization not found for eTIMS submission');
 
+    // Fail before any network I/O when live mode is under-configured or the
+    // taxpayer PIN is missing — the outbox marks it FAILED with this message.
+    const configErrors = this.client.liveConfigErrors();
+    const isMock = this.config.get<string>('etims.mode') === 'mock';
+    if (!isMock && !org.taxPin) configErrors.push('organization.taxPin');
+    if (configErrors.length > 0) {
+      throw new Error(`eTIMS submission blocked: missing ${configErrors.join(', ')}`);
+    }
+
+    // A KRA credit note must reference the original invoice's control number.
+    if (type === '2' && !invoice.etimsCtrlNo) {
+      throw new Error(
+        `Cannot submit credit note for ${invoice.invoiceNumber}: original control number missing (invoice never submitted)`,
+      );
+    }
+
     const deviceSerial = this.config.get<string>('etims.deviceSerial') ?? '';
     const payloadBody =
       type === '2'
