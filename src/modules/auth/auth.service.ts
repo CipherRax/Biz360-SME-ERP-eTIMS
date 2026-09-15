@@ -116,6 +116,17 @@ export class AuthService {
 
       await seedChartOfAccounts(tx, organization.id, user.id);
 
+      // Per-tenant defaults; editable later via the org settings endpoint.
+      await tx.organizationSetting.create({
+        data: {
+          organizationId: organization.id,
+          taxRate: process.env.DEFAULT_TAX_RATE ?? '16.00',
+          currency: 'KES',
+          invoiceNumberFormat: 'INV-YYYY-######',
+          defaultPaymentTermsDays: 30,
+        },
+      });
+
       return { organizationId: organization.id, userId: user.id };
     });
 

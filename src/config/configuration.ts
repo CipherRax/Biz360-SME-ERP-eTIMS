@@ -6,6 +6,7 @@ export interface AppConfig {
   port: number;
   apiPrefix: string;
   corsOrigins: string[];
+  idempotencyTtlHours: number;
 }
 
 export const appConfig = registerAs('app', (): AppConfig => {
@@ -17,6 +18,7 @@ export const appConfig = registerAs('app', (): AppConfig => {
       .split(',')
       .map((origin) => origin.trim())
       .filter(Boolean),
+    idempotencyTtlHours: parseInt(process.env.IDEMPOTENCY_TTL_HOURS ?? '24', 10),
   };
 });
 

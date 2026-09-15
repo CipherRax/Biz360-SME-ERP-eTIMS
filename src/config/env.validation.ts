@@ -54,4 +54,7 @@ export const envValidationSchema = Joi.object({
   // Throttler
   THROTTLE_TTL: Joi.number().integer().positive().default(60),
   THROTTLE_LIMIT: Joi.number().integer().positive().default(100),
+
+  // Idempotency
+  IDEMPOTENCY_TTL_HOURS: Joi.number().integer().positive().default(24),
 }).options({ abortEarly: false, allowUnknown: true, stripUnknown: true });

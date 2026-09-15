@@ -194,6 +194,26 @@ export class LedgerService {
     });
   }
 
+  postSalePaymentReversal(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    source: { id: string; invoiceNumber: string; amount: string | number },
+    userId?: string,
+  ) {
+    return this.post({
+      tx,
+      organizationId,
+      sourceType: 'SALE_PAYMENT_REVERSAL',
+      sourceId: source.id,
+      description: `Reversal of payment for voided sale ${source.invoiceNumber}`,
+      lines: [
+        { accountCode: '1200', debit: Number(source.amount) },
+        { accountCode: '1100', credit: Number(source.amount) },
+      ],
+      userId,
+    });
+  }
+
   postSaleVoid(
     tx: Prisma.TransactionClient,
     organizationId: string,
@@ -257,6 +277,26 @@ export class LedgerService {
       lines: [
         { accountCode: '2100', debit: Number(source.amount) },
         { accountCode: '1100', credit: Number(source.amount) },
+      ],
+      userId,
+    });
+  }
+
+  postPurchasePaymentReversal(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    source: { id: string; invoiceNumber: string; amount: string | number },
+    userId?: string,
+  ) {
+    return this.post({
+      tx,
+      organizationId,
+      sourceType: 'PURCHASE_PAYMENT_REVERSAL',
+      sourceId: source.id,
+      description: `Reversal of payment for voided purchase ${source.invoiceNumber}`,
+      lines: [
+        { accountCode: '1100', debit: Number(source.amount) },
+        { accountCode: '2100', credit: Number(source.amount) },
       ],
       userId,
     });

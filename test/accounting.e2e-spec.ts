@@ -431,6 +431,25 @@ describe('Accounting (e2e)', () => {
     const rows = gl.body.data.entries as Array<{ sourceType: string }>;
     expect(rows.some((r) => r.sourceType === 'PURCHASE_INVOICE')).toBe(true);
     expect(rows.some((r) => r.sourceType === 'PURCHASE_PAYMENT')).toBe(true);
+
+    // Voiding the released purchase reverses AP / inventory / VAT input books.
+    await http()
+      .post(`/api/v1/purchase-invoices/${purchaseId}/void`)
+      .set('authorization', `Bearer ${o.token}`)
+      .send({ reason: 'Wrong delivery' })
+      .expect(201);
+
+    const tb3 = await trialBalance(o.token);
+    expect(tb3.balanced).toBe(true);
+    expect(tb3.accounts.find((a) => a.code === '2100')!.balance).toBeCloseTo(0, 0);
+    expect(tb3.accounts.find((a) => a.code === '1300')!.balance).toBeCloseTo(0, 0);
+
+    const gl2 = await http()
+      .get('/api/v1/accounting/general-ledger?limit=100')
+      .set('authorization', `Bearer ${o.token}`)
+      .expect(200);
+    const rows2 = gl2.body.data.entries as Array<{ sourceType: string }>;
+    expect(rows2.some((r) => r.sourceType === 'PURCHASE_VOID')).toBe(true);
   });
 
   it('enforces role-based access on accounting writes but allows reads', async () => {

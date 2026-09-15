@@ -320,9 +320,18 @@ export class PurchasingService {
         });
       }
 
-      const updated = await tx.purchaseInvoice.update({
-        where: { id: purchaseId },
+      const cas = await tx.purchaseInvoice.updateMany({
+        where: { id: purchaseId, organizationId, status: 'DRAFT' },
         data: { status: 'CONFIRMED', dueDate, updatedBy: userId },
+      });
+      if (cas.count !== 1) {
+        throw new ConflictException(
+          `Cannot confirm a purchase in ${purchase.status} status`,
+        );
+      }
+
+      const updated = await tx.purchaseInvoice.findFirstOrThrow({
+        where: { id: purchaseId, organizationId },
         include: {
           lines: { orderBy: { sortOrder: 'asc' }, select: PURCHASE_LINES },
           party: { select: { id: true, name: true } },
@@ -356,12 +365,12 @@ export class PurchasingService {
         include: { lines: { select: { itemId: true, quantity: true } } },
       });
       if (!purchase) throw new NotFoundException('Purchase not found');
-      if (!(['DRAFT', 'CONFIRMED', 'PARTIALLY_PAID'] as InvoiceStatus[]).includes(purchase.status)) {
+      if (!(['DRAFT', 'CONFIRMED', 'PARTIALLY_PAID', 'PAID'] as InvoiceStatus[]).includes(purchase.status)) {
         throw new ConflictException(`Cannot void a purchase in ${purchase.status} status`);
       }
 
       const wasReleased =
-        purchase.status === 'CONFIRMED' || purchase.status === 'PARTIALLY_PAID';
+        purchase.status === 'CONFIRMED' || purchase.status === 'PARTIALLY_PAID' || purchase.status === 'PAID';
 
       if (wasReleased) {
         for (const line of purchase.lines) {
@@ -408,12 +417,28 @@ export class PurchasingService {
       });
 
       if (wasReleased) {
+        // Purchases are input-side (buyer): KRA eTIMS credit notes are only
+        // issued by suppliers, so there is nothing to submit here. The ledger
+        // reversal below restores AP and reverses the VAT input/stock bookkeeping.
         await this.ledger.postPurchaseVoid(tx, organizationId, {
           id: purchaseId,
           invoiceNumber: purchase.invoiceNumber,
           total: purchase.total,
           taxTotal: purchase.taxTotal,
         }, userId);
+
+        // Unwind any payments already made so AP doesn't go negative.
+        const payments = await tx.payment.findMany({
+          where: { purchaseInvoiceId: purchaseId, organizationId },
+          select: { id: true, amount: true },
+        });
+        for (const payment of payments) {
+          await this.ledger.postPurchasePaymentReversal(tx, organizationId, {
+            id: payment.id,
+            invoiceNumber: purchase.invoiceNumber,
+            amount: Number(payment.amount),
+          }, userId);
+        }
       }
 
       return voided;
@@ -499,14 +524,17 @@ export class PurchasingService {
         select: PAYMENT_SAFE,
       });
 
-      await tx.purchaseInvoice.update({
-        where: { id: dto.purchaseInvoiceId },
+      const cas = await tx.purchaseInvoice.updateMany({
+        where: { id: dto.purchaseInvoiceId, organizationId, amountPaid: purchase.amountPaid },
         data: {
           amountPaid: new Prisma.Decimal(newPaidTotal.toString()),
           status: newStatus,
           updatedBy: userId,
         },
       });
+      if (cas.count !== 1) {
+        throw new ConflictException('Purchase amount paid changed concurrently; retry');
+      }
 
       await this.ledger.postPurchasePayment(tx, organizationId, {
         id: payment.id,

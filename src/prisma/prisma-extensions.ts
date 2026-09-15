@@ -54,14 +54,10 @@ const TENANT_MODELS = new Set<Prisma.ModelName>([
 /** Models that record `createdBy` / `updatedBy` actor ids. */
 const AUDITED_MODELS = new Set<Prisma.ModelName>([
   Prisma.ModelName.User,
-  Prisma.ModelName.ItemCategory,
-  Prisma.ModelName.UnitOfMeasure,
-  Prisma.ModelName.Item,
   Prisma.ModelName.Party,
   Prisma.ModelName.SaleInvoice,
   Prisma.ModelName.Payment,
   Prisma.ModelName.PurchaseInvoice,
-  Prisma.ModelName.PurchaseInvoiceLine,
   Prisma.ModelName.Account,
   Prisma.ModelName.JournalEntry,
 ]);
@@ -79,6 +75,98 @@ function withOrg(where: Jsonish, organizationId: string): Jsonish {
 
 function withNotDeleted(where: Jsonish): Jsonish {
   return { ...where, deletedAt: null };
+}
+
+export interface RequestScope {
+  organizationId?: string;
+  userId?: string;
+}
+
+export function isSoftDeleteModel(model: Prisma.ModelName): boolean {
+  return SOFT_DELETE_MODELS.has(model);
+}
+
+export function isTenantModel(model: Prisma.ModelName): boolean {
+  return TENANT_MODELS.has(model);
+}
+
+export function isAuditedModel(model: Prisma.ModelName): boolean {
+  return AUDITED_MODELS.has(model);
+}
+
+/**
+ * Pure transform behind the tenant-isolation client. Kept separate from the
+ * Prisma extension so the isolation/soft-delete/audit rules can be unit-tested
+ * against arbitrary args without a database. Returns the original `rawArgs`
+ * when it is not a plain object (e.g. `null`, `undefined`, DMMF flags).
+ */
+export function composeQueryArgs(
+  model: Prisma.ModelName,
+  operation: string,
+  rawArgs: unknown,
+  scope: RequestScope | undefined,
+): unknown {
+  if (!rawArgs || typeof rawArgs !== 'object') {
+    return rawArgs;
+  }
+  const args = rawArgs as unknown as OpArgs;
+
+  // ---- soft-delete filtering -------------------------------------
+  // Reads and mutations never touch soft-deleted rows. `upsert` also
+  // carries an implicit read of the same row, so it is filtered too.
+  if (isSoftDeleteModel(model)) {
+    if (
+      ['findFirst', 'findFirstOrThrow', 'findMany', 'count', 'aggregate'].includes(
+        operation,
+      ) ||
+      ['update', 'updateMany', 'upsert', 'deleteMany'].includes(operation)
+    ) {
+      args.where = withNotDeleted(getWhere(args));
+    }
+  }
+
+  // ---- tenant isolation ------------------------------------------
+  const tenantId =
+    (args.data?.organizationId as string | undefined) ??
+    (args.create?.organizationId as string | undefined) ??
+    scope?.organizationId;
+
+  if (isTenantModel(model) && tenantId) {
+    if (operation === 'create') {
+      args.data = { ...args.data, organizationId: tenantId };
+    } else if (operation === 'upsert') {
+      args.where = withOrg(getWhere(args), tenantId);
+      args.create = { ...args.create, organizationId: tenantId };
+    } else if (
+      [
+        'findFirst',
+        'findFirstOrThrow',
+        'findMany',
+        'update',
+        'updateMany',
+        'delete',
+        'deleteMany',
+      ].includes(operation)
+    ) {
+      args.where = withOrg(getWhere(args), tenantId);
+    }
+  }
+
+  // ---- actor audit columns ---------------------------------------
+  const actorId = scope?.userId;
+  if (isAuditedModel(model) && actorId) {
+    if (operation === 'create' && args.data) {
+      args.data = {
+        ...args.data,
+        createdBy: actorId,
+        updatedBy: actorId,
+      };
+    } else if (operation === 'update' && args.data) {
+      args.data = { ...args.data, updatedBy: actorId };
+    }
+  }
+
+  return args;
 }
 
 /**
@@ -103,69 +191,9 @@ export function createExtendedPrismaClient(databaseUrl: string): PrismaClient {
     name: 'tenant-isolation',
     query: {
       $allOperations({ model, operation, args: rawArgs, query }) {
-        if (!rawArgs || typeof rawArgs !== 'object') {
-          return query(rawArgs as never);
-        }
-        const args = rawArgs as unknown as OpArgs;
-        const modelName = model as Prisma.ModelName;
-        const scope = getScope();
-
-        // ---- soft-delete filtering -------------------------------------
-        // Reads and mutations never touch soft-deleted rows. `upsert` also
-        // carries an implicit read of the same row, so it is filtered too.
-        if (SOFT_DELETE_MODELS.has(modelName)) {
-          if (
-            ['findFirst', 'findFirstOrThrow', 'findMany', 'count', 'aggregate'].includes(
-              operation,
-            ) ||
-            ['update', 'updateMany', 'upsert', 'deleteMany'].includes(operation)
-          ) {
-            args.where = withNotDeleted(getWhere(args));
-          }
-        }
-
-        // ---- tenant isolation ------------------------------------------
-        const tenantId =
-          (args.data?.organizationId as string | undefined) ??
-          (args.create?.organizationId as string | undefined) ??
-          scope?.organizationId;
-
-        if (TENANT_MODELS.has(modelName) && tenantId) {
-          if (operation === 'create') {
-            args.data = { ...args.data, organizationId: tenantId };
-          } else if (operation === 'upsert') {
-            args.where = withOrg(getWhere(args), tenantId);
-            args.create = { ...args.create, organizationId: tenantId };
-          } else if (
-            [
-              'findFirst',
-              'findFirstOrThrow',
-              'findMany',
-              'update',
-              'updateMany',
-              'delete',
-              'deleteMany',
-            ].includes(operation)
-          ) {
-            args.where = withOrg(getWhere(args), tenantId);
-          }
-        }
-
-        // ---- actor audit columns ---------------------------------------
-        const actorId = scope?.userId;
-        if (AUDITED_MODELS.has(modelName) && actorId) {
-          if (operation === 'create' && args.data) {
-            args.data = {
-              ...args.data,
-              createdBy: actorId,
-              updatedBy: actorId,
-            };
-          } else if (operation === 'update' && args.data) {
-            args.data = { ...args.data, updatedBy: actorId };
-          }
-        }
-
-        return query(args as never);
+        return query(
+          composeQueryArgs(model as Prisma.ModelName, operation, rawArgs, getScope()) as never,
+        );
       },
     },
   }) as PrismaClient;

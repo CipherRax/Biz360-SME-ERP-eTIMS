@@ -109,9 +109,11 @@ enum JournalSourceType {
   MANUAL
   SALE_INVOICE
   SALE_PAYMENT
+  SALE_PAYMENT_REVERSAL
   SALE_VOID
   PURCHASE_INVOICE
   PURCHASE_PAYMENT
+  PURCHASE_PAYMENT_REVERSAL
   PURCHASE_VOID
   REVERSAL
 }
@@ -560,6 +562,7 @@ model Payment {
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
   createdBy        String?
+  updatedBy        String?
 
   @@index([organizationId, paidAt])
   @@index([partyId])

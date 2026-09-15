@@ -292,15 +292,38 @@ export class SalesService {
         );
       }
 
-      // Load party for payment terms.
+      // Load party for payment terms + credit limit.
       const party = await tx.party.findFirst({
         where: { id: invoice.partyId },
-        select: { paymentTermsDays: true },
+        select: { paymentTermsDays: true, creditLimit: true },
       });
       const orgSetting = await tx.organizationSetting.findFirst({
         where: { organizationId },
         select: { defaultPaymentTermsDays: true },
       });
+
+      // Enforce the party credit limit (only when one is configured).
+      if (party?.creditLimit) {
+        const agg = await tx.saleInvoice.aggregate({
+          _sum: { total: true, amountPaid: true },
+          where: {
+            organizationId,
+            partyId: invoice.partyId,
+            status: {
+              in: ['CONFIRMED', 'PARTIALLY_PAID', 'PAID'] as InvoiceStatus[],
+            },
+          },
+        });
+        const outstanding =
+          Number(agg._sum.total ?? 0) - Number(agg._sum.amountPaid ?? 0);
+        const afterConfirming = round2(outstanding + Number(invoice.total));
+        const limit = Number(party.creditLimit);
+        if (afterConfirming > limit) {
+          throw new ConflictException(
+            `Party credit limit ${limit} would be exceeded (outstanding after confirmation: ${afterConfirming})`,
+          );
+        }
+      }
 
       const termsDays =
         party?.paymentTermsDays ??
@@ -340,13 +363,25 @@ export class SalesService {
         });
       }
 
-      const updated = await tx.saleInvoice.update({
-        where: { id: invoiceId },
+      // Optimistic concurrency: only flip DRAFT → CONFIRMED if still DRAFT.
+      // A concurrently-started confirm (both read DRAFT) loses here and the
+      // whole transaction — including its stock decrements — rolls back.
+      const cas = await tx.saleInvoice.updateMany({
+        where: { id: invoiceId, organizationId, status: 'DRAFT' },
         data: {
           status: 'CONFIRMED',
           dueDate,
           updatedBy: userId,
         },
+      });
+      if (cas.count !== 1) {
+        throw new ConflictException(
+          `Cannot confirm an invoice in ${invoice.status} status`,
+        );
+      }
+
+      const updated = await tx.saleInvoice.findFirstOrThrow({
+        where: { id: invoiceId, organizationId },
         include: {
           lines: { orderBy: { sortOrder: 'asc' }, select: INVOICE_LINES },
           party: { select: { id: true, name: true } },
@@ -394,12 +429,12 @@ export class SalesService {
         },
       });
       if (!invoice) throw new NotFoundException('Invoice not found');
-      if (!(['DRAFT', 'CONFIRMED', 'PARTIALLY_PAID'] as InvoiceStatus[]).includes(invoice.status)) {
+      if (!(['DRAFT', 'CONFIRMED', 'PARTIALLY_PAID', 'PAID'] as InvoiceStatus[]).includes(invoice.status)) {
         throw new ConflictException(`Cannot void an invoice in ${invoice.status} status`);
       }
 
       const wasReleased =
-        invoice.status === 'CONFIRMED' || invoice.status === 'PARTIALLY_PAID';
+        invoice.status === 'CONFIRMED' || invoice.status === 'PARTIALLY_PAID' || invoice.status === 'PAID';
 
       if (wasReleased) {
         // Reverse stock.
@@ -460,6 +495,19 @@ export class SalesService {
           total: invoice.total,
           taxTotal: invoice.taxTotal,
         }, userId);
+
+        // Unwind any payments already received so AR doesn't go negative.
+        const payments = await tx.payment.findMany({
+          where: { invoiceId, organizationId },
+          select: { id: true, amount: true },
+        });
+        for (const payment of payments) {
+          await this.ledger.postSalePaymentReversal(tx, organizationId, {
+            id: payment.id,
+            invoiceNumber: invoice.invoiceNumber,
+            amount: Number(payment.amount),
+          }, userId);
+        }
       }
 
       return voided;
@@ -543,14 +591,20 @@ export class SalesService {
         select: PAYMENT_SAFE,
       });
 
-      await tx.saleInvoice.update({
-        where: { id: dto.invoiceId },
+      // Optimistic concurrency: only apply the payment if amountPaid is still
+      // the value we read. A concurrently-applied payment makes the CAS fail
+      // and the whole transaction (payment row + balance) rolls back.
+      const cas = await tx.saleInvoice.updateMany({
+        where: { id: dto.invoiceId, organizationId, amountPaid: invoice.amountPaid },
         data: {
           amountPaid: new Prisma.Decimal(newPaidTotal.toString()),
           status: newStatus,
           updatedBy: userId,
         },
       });
+      if (cas.count !== 1) {
+        throw new ConflictException('Invoice balance changed concurrently; retry');
+      }
 
       await this.ledger.postSalePayment(tx, organizationId, {
         id: payment.id,

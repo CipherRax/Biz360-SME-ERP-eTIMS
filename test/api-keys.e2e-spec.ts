@@ -13,6 +13,7 @@ describe('API keys (e2e)', () => {
 
   beforeAll(async () => {
     process.env.LOG_LEVEL = 'silent';
+    process.env.ETIMS_MODE = 'mock';
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
@@ -152,5 +153,55 @@ describe('API keys (e2e)', () => {
       .delete(`/api/v1/api-keys/${a.body.data.id}`)
       .set('authorization', `Bearer ${tokenB}`)
       .expect(404);
+  });
+
+  it('authenticates requests with a Bearer API key (tenant-scoped, read-only)', async () => {
+    const token = await adminToken();
+    const key = await http()
+      .post('/api/v1/api-keys')
+      .set('authorization', `Bearer ${token}`)
+      .send({ name: 'viewer', scopes: ['reports:read'] })
+      .expect(201);
+    const apiKey = (key.body.data as { key: string }).key;
+
+    // Create a party so the org has read data, then read it with the API key.
+    const party = await http()
+      .post('/api/v1/parties')
+      .set('authorization', `Bearer ${token}`)
+      .send({ type: 'CUSTOMER', name: 'Key Party', taxId: 'P123456789K' })
+      .expect(201);
+
+    const read = await http()
+      .get('/api/v1/parties')
+      .set('authorization', `Bearer ${apiKey}`)
+      .expect(200);
+    expect((read.body.data as Array<{ id: string }>).map((p) => p.id)).toContain(
+      party.body.data.id,
+    );
+
+    // API keys are treated as READ_ONLY: writes and privileged endpoints are denied.
+    await http()
+      .post('/api/v1/parties')
+      .set('authorization', `Bearer ${apiKey}`)
+      .send({ type: 'SUPPLIER', name: 'Nope', taxId: 'P000000000A' })
+      .expect(403);
+    await http()
+      .get('/api/v1/users')
+      .set('authorization', `Bearer ${apiKey}`)
+      .expect(403);
+
+    // Invalid / revoked keys are rejected with 401.
+    await http()
+      .get('/api/v1/parties')
+      .set('authorization', `Bearer erp_invalid_made_up_key_value`)
+      .expect(401);
+    await http()
+      .delete(`/api/v1/api-keys/${key.body.data.id}`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(204);
+    await http()
+      .get('/api/v1/parties')
+      .set('authorization', `Bearer ${apiKey}`)
+      .expect(401);
   });
 });

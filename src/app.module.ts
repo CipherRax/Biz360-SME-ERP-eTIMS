@@ -17,6 +17,7 @@ import { PrismaModule } from './prisma/prisma.module.js';
 import { CommonModule } from './common/common.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { UsersModule } from './modules/users/users.module.js';
+import { OrganizationsModule } from './modules/organizations/organizations.module.js';
 import { ApiKeysModule } from './modules/api-keys/api-keys.module.js';
 import { InventoryModule } from './modules/inventory/inventory.module.js';
 import { PartiesModule } from './modules/parties/parties.module.js';
@@ -24,11 +25,13 @@ import { SalesModule } from './modules/sales/sales.module.js';
 import { PurchasingModule } from './modules/purchasing/purchasing.module.js';
 import { EtimsModule } from './modules/etims/etims.module.js';
 import { ReportingModule } from './modules/reporting/reporting.module.js';
+import { AccountingModule } from './modules/accounting/accounting.module.js';
 import { HealthModule } from './health/health.module.js';
 import { EventsModule } from './events/events.module.js';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
 import { RolesGuard } from './common/guards/roles.guard.js';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor.js';
+import { IdempotencyInterceptor } from './common/interceptors/idempotency.interceptor.js';
 import { AuditInterceptor } from './common/interceptors/audit.interceptor.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 
@@ -74,12 +77,14 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
     AuthModule,
     UsersModule,
     ApiKeysModule,
+    OrganizationsModule,
     InventoryModule,
     PartiesModule,
     SalesModule,
     PurchasingModule,
     EtimsModule,
     ReportingModule,
+    AccountingModule,
     HealthModule,
     CommonModule,
   ],
@@ -87,6 +92,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
     { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

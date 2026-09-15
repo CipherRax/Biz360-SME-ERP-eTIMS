@@ -277,6 +277,69 @@ describe('Sales & invoicing (e2e)', () => {
     expect(Number(itemAfterVoid.body.data.stockOnHand)).toBe(10);
   });
 
+  it('voids a PAID invoice by unwinding the payment', async () => {
+    const o = await org('sales-void-paid', 'ACCOUNTANT');
+    const { partyId, itemId } = await setupCustomerAndItem(o.admin, o.token);
+
+    await http()
+      .post(`/api/v1/items/${itemId}/stock`)
+      .set('authorization', `Bearer ${o.admin}`)
+      .send({ quantity: '5', reason: 'Opening balance' })
+      .expect(201);
+
+    const draft = await http()
+      .post('/api/v1/invoices')
+      .set('authorization', `Bearer ${o.token}`)
+      .send({ partyId, lines: [{ itemId, quantity: '2', unitPrice: '10000.00' }] })
+      .expect(201);
+    const invoiceId = draft.body.data.id;
+    const total = Number(draft.body.data.total);
+    expect(total).toBe(23200);
+
+    await http()
+      .post(`/api/v1/invoices/${invoiceId}/confirm`)
+      .set('authorization', `Bearer ${o.token}`)
+      .expect(201);
+    await http()
+      .post('/api/v1/invoices/payments')
+      .set('authorization', `Bearer ${o.token}`)
+      .send({ invoiceId, amount: String(total), method: 'BANK_TRANSFER' })
+      .expect(201);
+
+    const paid = await http()
+      .get(`/api/v1/invoices/${invoiceId}`)
+      .set('authorization', `Bearer ${o.token}`)
+      .expect(200);
+    expect(paid.body.data.status).toBe('PAID');
+
+    await http()
+      .post(`/api/v1/invoices/${invoiceId}/void`)
+      .set('authorization', `Bearer ${o.token}`)
+      .send({ reason: 'Paid in error' })
+      .expect(201);
+
+    const voided = await http()
+      .get(`/api/v1/invoices/${invoiceId}`)
+      .set('authorization', `Bearer ${o.token}`)
+      .expect(200);
+    expect(voided.body.data.status).toBe('VOID');
+    // The payment record remains (money history) but the invoice can no longer
+    // attract more payments.
+    expect(Number(voided.body.data.amountPaid)).toBe(total);
+
+    const itemAfterVoid = await http()
+      .get(`/api/v1/items/${itemId}`)
+      .set('authorization', `Bearer ${o.token}`)
+      .expect(200);
+    expect(Number(itemAfterVoid.body.data.stockOnHand)).toBe(5);
+
+    await http()
+      .post('/api/v1/invoices/payments')
+      .set('authorization', `Bearer ${o.token}`)
+      .send({ invoiceId, amount: '100.00', method: 'CASH' })
+      .expect(409);
+  });
+
   it('isolates invoices per organization and enforces RBAC', async () => {
     const oA = await org('sales-iso-a', 'ACCOUNTANT');
     const oB = await org('sales-iso-b', 'ACCOUNTANT');
@@ -319,5 +382,127 @@ describe('Sales & invoicing (e2e)', () => {
       .send({ partyId: supplier.body.data.id, lines: [{ itemId, quantity: '1' }] })
       .expect(400);
     expect(invalid.body.message).toContain('supplier');
+  });
+
+  it('blocks confirmation when stock is below the requested quantity', async () => {
+    const o = await org('sales-stock-floor', 'ACCOUNTANT');
+    const { partyId, itemId } = await setupCustomerAndItem(o.admin, o.token);
+
+    await http()
+      .post(`/api/v1/items/${itemId}/stock`)
+      .set('authorization', `Bearer ${o.admin}`)
+      .send({ quantity: '2', reason: 'Opening balance' })
+      .expect(201);
+
+    const draft = await http()
+      .post('/api/v1/invoices')
+      .set('authorization', `Bearer ${o.token}`)
+      .send({ partyId, lines: [{ itemId, quantity: '3', unitPrice: '100.00' }] })
+      .expect(201);
+
+    const blocked = await http()
+      .post(`/api/v1/invoices/${draft.body.data.id}/confirm`)
+      .set('authorization', `Bearer ${o.token}`)
+      .expect(409);
+    expect(blocked.body.message).toContain('Insufficient stock');
+
+    const stillDraft = await http()
+      .get(`/api/v1/invoices/${draft.body.data.id}`)
+      .set('authorization', `Bearer ${o.token}`)
+      .expect(200);
+    expect(stillDraft.body.data.status).toBe('DRAFT');
+  });
+
+  it('applies a concurrent double payment exactly once', async () => {
+    const o = await org('sales-concurrent', 'ACCOUNTANT');
+    const { partyId, itemId } = await setupCustomerAndItem(o.admin, o.token);
+
+    await http()
+      .post(`/api/v1/items/${itemId}/stock`)
+      .set('authorization', `Bearer ${o.admin}`)
+      .send({ quantity: '1', reason: 'Opening balance' })
+      .expect(201);
+
+    const invoice = await http()
+      .post('/api/v1/invoices')
+      .set('authorization', `Bearer ${o.token}`)
+      .send({ partyId, lines: [{ itemId, quantity: '1', unitPrice: '10000.00' }] })
+      .expect(201);
+    const invoiceId = invoice.body.data.id;
+    await http()
+      .post(`/api/v1/invoices/${invoiceId}/confirm`)
+      .set('authorization', `Bearer ${o.token}`)
+      .expect(201);
+
+    const [r1, r2] = await Promise.all([
+      http()
+        .post('/api/v1/invoices/payments')
+        .set('authorization', `Bearer ${o.token}`)
+        .set('idempotency-key', `conc-1-${run}`)
+        .send({ invoiceId, amount: '23200.00', method: 'BANK_TRANSFER' }),
+      http()
+        .post('/api/v1/invoices/payments')
+        .set('authorization', `Bearer ${o.token}`)
+        .set('idempotency-key', `conc-2-${run}`)
+        .send({ invoiceId, amount: '23200.00', method: 'CASH' }),
+    ]);
+
+    const okCount = [r1, r2].filter((r) => r.status === 201).length;
+    const conflictCount = [r1, r2].filter((r) => r.status === 409).length;
+    expect(okCount).toBe(1);
+    expect(conflictCount).toBe(1);
+
+    const paid = await http()
+      .get(`/api/v1/invoices/${invoiceId}`)
+      .set('authorization', `Bearer ${o.token}`)
+      .expect(200);
+    // One payment applied — the balance must not be double-booked.
+    expect(Number(paid.body.data.amountPaid)).toBe(23200);
+    expect(paid.body.data.status).toBe('PAID');
+  });
+
+  it('applies a concurrent double confirm exactly once', async () => {
+    const o = await org('sales-double-confirm', 'ACCOUNTANT');
+    const { partyId, itemId } = await setupCustomerAndItem(o.admin, o.token);
+
+    await http()
+      .post(`/api/v1/items/${itemId}/stock`)
+      .set('authorization', `Bearer ${o.admin}`)
+      .send({ quantity: '1', reason: 'Opening balance' })
+      .expect(201);
+
+    const invoice = await http()
+      .post('/api/v1/invoices')
+      .set('authorization', `Bearer ${o.token}`)
+      .send({ partyId, lines: [{ itemId, quantity: '1', unitPrice: '10000.00' }] })
+      .expect(201);
+    const invoiceId = invoice.body.data.id;
+
+    const results = await Promise.all([
+      http()
+        .post(`/api/v1/invoices/${invoiceId}/confirm`)
+        .set('authorization', `Bearer ${o.token}`)
+        .set('idempotency-key', `dconf-1-${run}`),
+      http()
+        .post(`/api/v1/invoices/${invoiceId}/confirm`)
+        .set('authorization', `Bearer ${o.token}`)
+        .set('idempotency-key', `dconf-2-${run}`),
+    ]);
+
+    expect(results.filter((r) => r.status === 201).length).toBe(1);
+    expect(results.filter((r) => r.status === 409).length).toBe(1);
+
+    // Stock decremented exactly once despite two confirm attempts.
+    const item = await http()
+      .get(`/api/v1/items/${itemId}`)
+      .set('authorization', `Bearer ${o.token}`)
+      .expect(200);
+    expect(Number(item.body.data.stockOnHand)).toBe(0);
+
+    const confirmed = await http()
+      .get(`/api/v1/invoices/${invoiceId}`)
+      .set('authorization', `Bearer ${o.token}`)
+      .expect(200);
+    expect(confirmed.body.data.status).toBe('CONFIRMED');
   });
 });
