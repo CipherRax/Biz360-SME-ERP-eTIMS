@@ -333,11 +333,12 @@ export class SalesService {
       dueDate.setDate(dueDate.getDate() + termsDays);
 
       // Decrement stock for trackStock items.
+      let cogsTotal = 0;
       for (const line of invoice.lines) {
         if (!line.itemId) continue;
         const item = await tx.item.findFirst({
           where: { id: line.itemId, organizationId },
-          select: { id: true, stockOnHand: true, trackStock: true },
+          select: { id: true, stockOnHand: true, trackStock: true, buyPrice: true },
         });
         if (!item || !item.trackStock) continue;
         const onHand = Number(item.stockOnHand);
@@ -361,6 +362,7 @@ export class SalesService {
             userId,
           },
         });
+        cogsTotal = round2(cogsTotal + qty * Number(item.buyPrice ?? 0));
       }
 
       // Optimistic concurrency: only flip DRAFT → CONFIRMED if still DRAFT.
@@ -407,6 +409,15 @@ export class SalesService {
         taxTotal: invoice.taxTotal,
       }, userId);
 
+      // Recognise gross profit: value the dispatched stock at item cost.
+      if (cogsTotal > 0) {
+        await this.ledger.postSaleCogs(tx, organizationId, {
+          id: invoiceId,
+          invoiceNumber: invoice.invoiceNumber,
+          costTotal: cogsTotal,
+        }, userId);
+      }
+
       return updated;
     });
   }
@@ -436,13 +447,15 @@ export class SalesService {
       const wasReleased =
         invoice.status === 'CONFIRMED' || invoice.status === 'PARTIALLY_PAID' || invoice.status === 'PAID';
 
+      let cogsTotal = 0;
+
       if (wasReleased) {
         // Reverse stock.
         for (const line of invoice.lines) {
           if (!line.itemId) continue;
           const item = await tx.item.findFirst({
             where: { id: line.itemId, organizationId },
-            select: { id: true, trackStock: true },
+            select: { id: true, trackStock: true, buyPrice: true },
           });
           if (!item || !item.trackStock) continue;
           await tx.item.update({
@@ -459,6 +472,7 @@ export class SalesService {
               userId,
             },
           });
+          cogsTotal = round2(cogsTotal + Number(line.quantity) * Number(item.buyPrice ?? 0));
         }
       }
 
@@ -495,6 +509,15 @@ export class SalesService {
           total: invoice.total,
           taxTotal: invoice.taxTotal,
         }, userId);
+
+        // Reverse the cost of goods sold recognised at confirmation.
+        if (cogsTotal > 0) {
+          await this.ledger.postSaleCogsReversal(tx, organizationId, {
+            id: invoiceId,
+            invoiceNumber: invoice.invoiceNumber,
+            costTotal: cogsTotal,
+          }, userId);
+        }
 
         // Unwind any payments already received so AR doesn't go negative.
         const payments = await tx.payment.findMany({

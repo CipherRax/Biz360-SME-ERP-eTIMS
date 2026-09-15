@@ -108,6 +108,8 @@ enum JournalEntryStatus {
 enum JournalSourceType {
   MANUAL
   SALE_INVOICE
+  SALE_COGS
+  SALE_COGS_REVERSAL
   SALE_PAYMENT
   SALE_PAYMENT_REVERSAL
   SALE_VOID

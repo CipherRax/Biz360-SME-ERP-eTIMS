@@ -151,7 +151,7 @@ export class LedgerService {
 
   /* ------------------------------ Sales --------------------------------- */
 
-  postSaleInvoice(
+postSaleInvoice(
     tx: Prisma.TransactionClient,
     organizationId: string,
     source: { id: string; invoiceNumber: string; total: Prisma.Decimal | string | number; taxTotal: Prisma.Decimal | string | number },
@@ -166,9 +166,53 @@ export class LedgerService {
       sourceId: source.id,
       description: `Sales invoice ${source.invoiceNumber}`,
       lines: [
-        { accountCode: LedgerService.AR, debit: total },
-        { accountCode: LedgerService.REVENUE, credit: round2(total - tax) },
-        { accountCode: LedgerService.VAT_OUTPUT, credit: tax },
+        { accountCode: '1200', debit: total },
+        { accountCode: '4100', credit: round2(total - tax) },
+        { accountCode: '2200', credit: tax },
+      ],
+      userId,
+    });
+  }
+
+  postSaleCogs(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    source: { id: string; invoiceNumber: string; costTotal: Prisma.Decimal | string | number },
+    userId?: string,
+  ) {
+    const cogs = Number(source.costTotal);
+    if (cogs <= 0) return;
+    return this.post({
+      tx,
+      organizationId,
+      sourceType: 'SALE_COGS',
+      sourceId: source.id,
+      description: `Cost of goods sold for sales invoice ${source.invoiceNumber}`,
+      lines: [
+        { accountCode: '5100', debit: round2(cogs) },
+        { accountCode: '1300', credit: round2(cogs) },
+      ],
+      userId,
+    });
+  }
+
+  postSaleCogsReversal(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    source: { id: string; invoiceNumber: string; costTotal: Prisma.Decimal | string | number },
+    userId?: string,
+  ) {
+    const cogs = Number(source.costTotal);
+    if (cogs <= 0) return;
+    return this.post({
+      tx,
+      organizationId,
+      sourceType: 'SALE_COGS_REVERSAL',
+      sourceId: source.id,
+      description: `Reversal of cost of goods sold for voided sales invoice ${source.invoiceNumber}`,
+      lines: [
+        { accountCode: '1300', debit: round2(cogs) },
+        { accountCode: '5100', credit: round2(cogs) },
       ],
       userId,
     });

@@ -337,7 +337,9 @@ describe('Accounting (e2e)', () => {
       .set('authorization', `Bearer ${o.token}`)
       .expect(200);
     expect(pl1.body.data.totalIncome).toBeCloseTo(20000, 0);
-    expect(pl1.body.data.netIncome).toBeCloseTo(20000, 0);
+    // COGS recognised at item cost (2 × 10000 buyPrice) → gross profit is nil.
+    expect(pl1.body.data.totalExpenses).toBeCloseTo(20000, 0);
+    expect(pl1.body.data.netIncome).toBeCloseTo(0, 0);
 
     // Payment: DR Cash 10000 / CR AR 10000.
     await http()
@@ -361,17 +363,19 @@ describe('Accounting (e2e)', () => {
       account: { code: string };
     }>;
     expect(rows.some((r) => r.sourceType === 'SALE_INVOICE' && r.account.code === '1200')).toBe(true);
+    expect(rows.some((r) => r.sourceType === 'SALE_COGS' && r.account.code === '5100')).toBe(true);
     expect(rows.some((r) => r.sourceType === 'SALE_PAYMENT' && r.account.code === '1100')).toBe(true);
     expect(rows.some((r) => r.sourceType === 'SALE_PAYMENT')).toBe(true);
 
     // Balance sheet balances: assets == liabilities + equity + net income.
+    // (AR 23200 + inventory −20000 recognising COGS against buypriced stock.)
     const bs = await http()
       .get('/api/v1/accounting/balance-sheet')
       .set('authorization', `Bearer ${o.token}`)
       .expect(200);
-    expect(bs.body.data.totalAssets).toBeCloseTo(23200, 0);
-    expect(bs.body.data.totalLiabilitiesAndEquity).toBeCloseTo(23200, 0);
-    expect(bs.body.data.netIncome).toBeCloseTo(20000, 0);
+    expect(bs.body.data.totalAssets).toBeCloseTo(3200, 0);
+    expect(bs.body.data.totalLiabilitiesAndEquity).toBeCloseTo(3200, 0);
+    expect(bs.body.data.netIncome).toBeCloseTo(0, 0);
 
     // Void the released invoice → SALE_VOID reversal posted, ledger stays balanced.
     await http()
