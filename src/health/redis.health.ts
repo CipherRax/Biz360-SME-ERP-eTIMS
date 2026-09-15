@@ -18,11 +18,30 @@ export class RedisHealthIndicator {
     });
   }
 
+  /** Wait until the client is ready before issuing commands (first ping on a fresh boot races connection setup). */
+  private async ensureReady(): Promise<void> {
+    if (this.client.status === 'ready') return;
+    if (this.client.status === 'end' || this.client.status === 'close' || this.client.status === 'wait') {
+      await this.client.connect();
+      return;
+    }
+    await new Promise<void>((resolve, reject) => {
+      const onReady = () => {
+        this.client.off('error', onError);
+        resolve();
+      };
+      const onError = (error: Error) => {
+        this.client.off('ready', onReady);
+        reject(error);
+      };
+      this.client.once('ready', onReady);
+      this.client.once('error', onError);
+    });
+  }
+
   async ping(key: string): Promise<HealthIndicatorResult> {
     try {
-      if (this.client.status === 'end' || this.client.status === 'close') {
-        this.client.connect().catch(() => undefined);
-      }
+      await this.ensureReady();
       const pong = await this.client.ping();
       if (pong !== 'PONG') {
         throw new Error(`Unexpected reply: ${pong}`);
