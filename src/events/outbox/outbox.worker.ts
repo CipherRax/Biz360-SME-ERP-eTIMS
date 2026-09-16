@@ -97,7 +97,20 @@ export class OutboxWorker {
       data: { status: 'PROCESSING' },
     });
     if (claimed.count === 0) return [];
-    return due;
+
+    // Return only the rows THIS worker actually claimed. With concurrent
+    // workers, an in-flight competitor may have claimed a subset of `due`
+    // between our read and our updateMany; re-reading the now-PROCESSING rows
+    // (scoped to our candidate set) keeps processing exactly-once-per-claim.
+    const claimedRows = new Set(
+      (
+        await this.prisma.client.outboxEvent.findMany({
+          where: { id: { in: due.map((row) => row.id) }, status: 'PROCESSING' },
+          select: { id: true },
+        })
+      ).map((row) => row.id),
+    );
+    return due.filter((row) => claimedRows.has(row.id));
   }
 
   private async processRow(row: EventRow): Promise<void> {

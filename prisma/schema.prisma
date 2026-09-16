@@ -118,6 +118,62 @@ enum JournalSourceType {
   PURCHASE_PAYMENT_REVERSAL
   PURCHASE_VOID
   REVERSAL
+  CREDIT_NOTE
+}
+
+enum QuotationStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  CONVERTED
+  EXPIRED
+  CANCELLED
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  RECEIVED
+  CLOSED
+  REJECTED
+  CANCELLED
+}
+
+enum GoodsReceiptStatus {
+  DRAFT
+  CONFIRMED
+  CANCELLED
+}
+
+enum CreditNoteStatus {
+  DRAFT
+  ISSUED
+  CANCELLED
+}
+
+enum BankAccountType {
+  BANK
+  M_PESA
+  CASH
+  MOBILE_MONEY
+}
+
+enum NotificationType {
+  LOW_STOCK
+  INVOICE_CONFIRMED
+  INVOICE_PAID
+  PO_APPROVED
+  PO_REJECTED
+  PAYMENT_RECEIVED
+  SYSTEM
+  CUSTOM
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+  ARCHIVED
 }
 
 // ----------------------------- Organization --------------------------------
@@ -160,6 +216,22 @@ model Organization {
   journalEntries          JournalEntry[]
   journalEntryLines       JournalEntryLine[]
   journalEntrySeqs        JournalEntrySeq[]
+  quotations              Quotation[]
+  quotationLines          QuotationLine[]
+  quotationNumberSeqs     QuotationNumberSeq[]
+  purchaseOrders          PurchaseOrder[]
+  purchaseOrderLines      PurchaseOrderLine[]
+  purchaseOrderNumberSeqs PurchaseOrderNumberSeq[]
+  goodsReceipts           GoodsReceipt[]
+  goodsReceiptLines       GoodsReceiptLine[]
+  goodsReceiptNumberSeqs  GoodsReceiptNumberSeq[]
+  creditNotes             CreditNote[]
+  creditNoteLines         CreditNoteLine[]
+  creditNoteNumberSeqs    CreditNoteNumberSeq[]
+  bankAccounts            BankAccount[]
+  bankStatementLines      BankStatementLine[]
+  bankReconciliations     BankReconciliation[]
+  notifications           Notification[]
 
   @@map("organizations")
 }
@@ -424,6 +496,10 @@ model Item {
   saleLines SaleInvoiceLine[]
   purchaseLines PurchaseInvoiceLine[]
   stockMovements StockMovement[]
+  quotationLines QuotationLine[]
+  purchaseOrderLines PurchaseOrderLine[]
+  goodsReceiptLines GoodsReceiptLine[]
+  creditNoteLines CreditNoteLine[]
 
   @@unique([organizationId, sku])
   @@index([organizationId])
@@ -464,6 +540,10 @@ model Party {
   saleInvoices SaleInvoice[]
   payments     Payment[]
   purchaseInvoices PurchaseInvoice[]
+  quotations Quotation[]
+  purchaseOrders PurchaseOrder[]
+  goodsReceipts GoodsReceipt[]
+  creditNotes CreditNote[]
 
   @@unique([organizationId, taxId])
   @@index([organizationId])
@@ -509,6 +589,7 @@ etimsCtrlNo    String?
 
   lines    SaleInvoiceLine[]
   payments Payment[] @relation("SaleInvoicePayments")
+  creditNotes CreditNote[]
 
   @@unique([organizationId, invoiceNumber])
   @@index([organizationId, status])
@@ -775,4 +856,368 @@ model JournalEntrySeq {
   value          Int          @default(0)
 
   @@map("journal_entry_seqs")
+}
+
+// ------------------------------- Quotations ----------------------------------
+
+/// A quote to a customer. Can be converted to a sale invoice.
+model Quotation {
+  id              String           @id @default(uuid())
+  organizationId  String
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quoteNumber     String
+  partyId         String
+  party           Party            @relation(fields: [partyId], references: [id])
+  quoteDate       DateTime         @default(now())
+  validUntil      DateTime?
+  status          QuotationStatus  @default(DRAFT)
+  subtotal        Decimal          @default(0) @db.Decimal(18, 2)
+  discountTotal   Decimal          @default(0) @db.Decimal(18, 2)
+  taxTotal        Decimal          @default(0) @db.Decimal(18, 2)
+  total           Decimal          @default(0) @db.Decimal(18, 2)
+  currency        String           @default("KES")
+  notes           String?
+  convertedInvoiceId String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  createdBy       String?
+  updatedBy       String?
+
+  lines QuotationLine[]
+
+  @@unique([organizationId, quoteNumber])
+  @@index([organizationId, status])
+  @@index([organizationId, partyId])
+  @@map("quotations")
+}
+
+model QuotationLine {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quotationId    String
+  quotation      Quotation    @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  itemId         String?
+  item           Item?        @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  description    String
+  quantity       Decimal      @default(1) @db.Decimal(18, 3)
+  unitPrice      Decimal      @default(0) @db.Decimal(18, 2)
+  taxRate        Decimal      @default(0) @db.Decimal(5, 2)
+  discountPct    Decimal      @default(0) @db.Decimal(5, 2)
+  lineDiscount   Decimal      @default(0) @db.Decimal(18, 2)
+  lineAmount     Decimal      @default(0) @db.Decimal(18, 2)
+  lineTotal      Decimal      @default(0) @db.Decimal(18, 2)
+  taxAmount      Decimal      @default(0) @db.Decimal(18, 2)
+  sortOrder      Int          @default(0)
+
+  @@index([quotationId])
+  @@index([itemId])
+  @@index([organizationId])
+  @@map("quotation_lines")
+}
+
+/// Per-organization quotation number sequences.
+model QuotationNumberSeq {
+  id             String       @id @default(uuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  value          Int          @default(0)
+
+  @@map("quotation_number_seqs")
+}
+
+// ------------------------------ Purchase Orders -------------------------------
+
+/// Purchase order with approval workflow. Supplier-facing procurement.
+model PurchaseOrder {
+  id              String              @id @default(uuid())
+  organizationId  String
+  organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  poNumber        String
+  partyId         String
+  party           Party               @relation(fields: [partyId], references: [id])
+  orderDate       DateTime            @default(now())
+  expectedDate    DateTime?
+  status          PurchaseOrderStatus @default(DRAFT)
+  subtotal        Decimal             @default(0) @db.Decimal(18, 2)
+  discountTotal   Decimal             @default(0) @db.Decimal(18, 2)
+  taxTotal        Decimal             @default(0) @db.Decimal(18, 2)
+  total           Decimal             @default(0) @db.Decimal(18, 2)
+  currency        String              @default("KES")
+  notes           String?
+  approvedBy      String?
+  approvedAt      DateTime?
+  rejectedReason  String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  createdBy       String?
+  updatedBy       String?
+
+  lines    PurchaseOrderLine[]
+  receipts GoodsReceipt[]
+
+  @@unique([organizationId, poNumber])
+  @@index([organizationId, status])
+  @@index([organizationId, partyId])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderLine {
+  id             String         @id @default(uuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  orderId        String
+  order          PurchaseOrder  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  itemId         String?
+  item           Item?          @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  description    String
+  quantity       Decimal        @default(1) @db.Decimal(18, 3)
+  receivedQty    Decimal        @default(0) @db.Decimal(18, 3)
+  unitPrice      Decimal        @default(0) @db.Decimal(18, 2)
+  taxRate        Decimal        @default(0) @db.Decimal(5, 2)
+  discountPct    Decimal        @default(0) @db.Decimal(5, 2)
+  lineDiscount   Decimal        @default(0) @db.Decimal(18, 2)
+  lineAmount     Decimal        @default(0) @db.Decimal(18, 2)
+  lineTotal      Decimal        @default(0) @db.Decimal(18, 2)
+  taxAmount      Decimal        @default(0) @db.Decimal(18, 2)
+  sortOrder      Int            @default(0)
+
+  receipts GoodsReceiptLine[]
+
+  @@index([orderId])
+  @@index([itemId])
+  @@index([organizationId])
+  @@map("purchase_order_lines")
+}
+
+/// Per-organization PO number sequences.
+model PurchaseOrderNumberSeq {
+  id             String       @id @default(uuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  value          Int          @default(0)
+
+  @@map("purchase_order_number_seqs")
+}
+
+// ------------------------------ Goods Receipts -------------------------------
+
+/// Goods receipt note — records actual delivery of goods against a purchase order.
+model GoodsReceipt {
+  id              String            @id @default(uuid())
+  organizationId  String
+  organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  grnNumber       String
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder     @relation(fields: [purchaseOrderId], references: [id])
+  partyId         String
+  party           Party             @relation(fields: [partyId], references: [id])
+  receivedDate    DateTime          @default(now())
+  status          GoodsReceiptStatus @default(DRAFT)
+  notes           String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  createdBy       String?
+  updatedBy       String?
+
+  lines GoodsReceiptLine[]
+
+  @@unique([organizationId, grnNumber])
+  @@index([organizationId, purchaseOrderId])
+  @@index([organizationId, status])
+  @@map("goods_receipts")
+}
+
+model GoodsReceiptLine {
+  id             String            @id @default(uuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  receiptId      String
+  receipt        GoodsReceipt      @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  poLineId       String
+  poLine         PurchaseOrderLine @relation(fields: [poLineId], references: [id])
+  itemId         String?
+  item           Item?             @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  description    String
+  quantity       Decimal           @db.Decimal(18, 3)
+  notes          String?
+
+  @@index([receiptId])
+  @@index([poLineId])
+  @@index([organizationId])
+  @@map("goods_receipt_lines")
+}
+
+/// Per-organization GRN number sequences.
+model GoodsReceiptNumberSeq {
+  id             String       @id @default(uuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  value          Int          @default(0)
+
+  @@map("goods_receipt_number_seqs")
+}
+
+// ------------------------------- Credit Notes --------------------------------
+
+/// First-class credit note document (customer returns / adjustments).
+model CreditNote {
+  id             String           @id @default(uuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  noteNumber     String
+  partyId        String
+  party          Party            @relation(fields: [partyId], references: [id])
+  referenceInvoiceId String?
+  referenceInvoice SaleInvoice?   @relation(fields: [referenceInvoiceId], references: [id])
+  noteDate       DateTime         @default(now())
+  status         CreditNoteStatus @default(DRAFT)
+  subtotal       Decimal          @default(0) @db.Decimal(18, 2)
+  discountTotal  Decimal          @default(0) @db.Decimal(18, 2)
+  taxTotal       Decimal          @default(0) @db.Decimal(18, 2)
+  total          Decimal          @default(0) @db.Decimal(18, 2)
+  currency       String           @default("KES")
+  reason         String?
+  etimsCtrlNo    String?
+  etimsReceipt   String?
+  etimsSubmittedAt DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  createdBy      String?
+  updatedBy      String?
+
+  lines CreditNoteLine[]
+
+  @@unique([organizationId, noteNumber])
+  @@index([organizationId, status])
+  @@index([organizationId, partyId])
+  @@index([organizationId, referenceInvoiceId])
+  @@map("credit_notes")
+}
+
+model CreditNoteLine {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  noteId         String
+  note           CreditNote   @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  itemId         String?
+  item           Item?        @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  description    String
+  quantity       Decimal      @default(1) @db.Decimal(18, 3)
+  unitPrice      Decimal      @default(0) @db.Decimal(18, 2)
+  taxRate        Decimal      @default(0) @db.Decimal(5, 2)
+  discountPct    Decimal      @default(0) @db.Decimal(5, 2)
+  lineDiscount   Decimal      @default(0) @db.Decimal(18, 2)
+  lineAmount     Decimal      @default(0) @db.Decimal(18, 2)
+  lineTotal      Decimal      @default(0) @db.Decimal(18, 2)
+  taxAmount      Decimal      @default(0) @db.Decimal(18, 2)
+  sortOrder      Int          @default(0)
+
+  @@index([noteId])
+  @@index([itemId])
+  @@index([organizationId])
+  @@map("credit_note_lines")
+}
+
+/// Per-organization credit note number sequences.
+model CreditNoteNumberSeq {
+  id             String       @id @default(uuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  value          Int          @default(0)
+
+  @@map("credit_note_number_seqs")
+}
+
+// --------------------------------- Banking -----------------------------------
+
+/// Bank / mobile money account for reconciliation.
+model BankAccount {
+  id             String          @id @default(uuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  accountType    BankAccountType @default(BANK)
+  accountCode    String?
+  bankName       String?
+  accountNumber  String?
+  openingBalance Decimal         @default(0) @db.Decimal(18, 2)
+  currentBalance Decimal         @default(0) @db.Decimal(18, 2)
+  active         Boolean         @default(true)
+  deletedAt      DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  reconciliations BankReconciliation[]
+  statementLines  BankStatementLine[]
+
+  @@unique([organizationId, accountCode])
+  @@index([organizationId])
+  @@map("bank_accounts")
+}
+
+/// Bank statement line imported for reconciliation.
+model BankStatementLine {
+  id               String            @id @default(uuid())
+  organizationId   String
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  accountId        String
+  account          BankAccount       @relation(fields: [accountId], references: [id])
+  transactionDate  DateTime
+  description      String?
+  reference        String?
+  debit            Decimal           @default(0) @db.Decimal(18, 2)
+  credit           Decimal           @default(0) @db.Decimal(18, 2)
+  reconciled       Boolean           @default(false)
+  reconciledAt     DateTime?
+  reconciledById   String?
+  reconciliationId String?
+  reconciliation   BankReconciliation? @relation(fields: [reconciliationId], references: [id])
+  createdAt        DateTime          @default(now())
+
+  @@index([accountId, reconciled])
+  @@index([organizationId])
+  @@map("bank_statement_lines")
+}
+
+/// Reconciliation session linking bank statement lines to system transactions.
+model BankReconciliation {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  accountId      String
+  account        BankAccount  @relation(fields: [accountId], references: [id])
+  periodStart    DateTime
+  periodEnd      DateTime
+  reconciledBy   String?
+  reconciledAt   DateTime     @default(now())
+  notes          String?
+
+  statementLines BankStatementLine[]
+
+  @@index([accountId])
+  @@index([organizationId])
+  @@map("bank_reconciliations")
+}
+
+// ------------------------------- Notifications -------------------------------
+
+/// In-app notifications for users.
+model Notification {
+  id              String             @id @default(uuid())
+  organizationId  String
+  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  type            NotificationType   @default(CUSTOM)
+  status          NotificationStatus @default(UNREAD)
+  title           String
+  message         String?
+  referenceType   String?
+  referenceId     String?
+  metadata        Json?
+  createdAt       DateTime           @default(now())
+
+  @@index([organizationId, status])
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@map("notifications")
 }

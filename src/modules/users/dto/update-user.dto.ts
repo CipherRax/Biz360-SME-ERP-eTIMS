@@ -7,7 +7,7 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
-import { Role } from '../../../generated/prisma/client.js';
+import { Role, UserStatus } from '../../../generated/prisma/client.js';
 
 export class UpdateProfileDto {
   @IsOptional()
@@ -26,4 +26,8 @@ export class AdminUpdateUserDto {
   @IsOptional()
   @IsEnum(Role)
   role?: Role;
+
+  @IsOptional()
+  @IsEnum(UserStatus)
+  status?: UserStatus;
 }

@@ -23,6 +23,7 @@ import {
   sum,
   toAmount,
 } from '../../common/helpers/money.js';
+import { formatDocumentNumber } from '../../common/helpers/number-format.js';
 import { LedgerService } from '../accounting/ledger.service.js';
 
 /* -------------------------------------------------------------------------- */
@@ -150,14 +151,14 @@ export class SalesService {
   private async allocateNumber(
     organizationId: string,
     client: Prisma.TransactionClient,
+    format: string,
   ): Promise<string> {
     const seq = await client.invoiceNumberSeq.upsert({
       where: { organizationId },
       create: { organizationId, value: 1 },
       update: { value: { increment: 1 } },
     });
-    const year = new Date().getFullYear();
-    return `INV-${year}-${String(seq.value).padStart(6, '0')}`;
+    return formatDocumentNumber(format, seq.value);
   }
 
   /* ----------------------------------------------------------------------- */
@@ -181,10 +182,10 @@ export class SalesService {
       );
     }
 
-    // Fetch organization settings for default tax rate.
+    // Fetch organization settings for default tax rate and invoice number format.
     const orgSetting = await this.prisma.client.organizationSetting.findFirst({
       where: { organizationId },
-      select: { taxRate: true, currency: true },
+      select: { taxRate: true, currency: true, invoiceNumberFormat: true },
     });
     const orgTaxRate = Number(orgSetting?.taxRate ?? 16);
 
@@ -224,7 +225,8 @@ export class SalesService {
     const total = round2(sum(lineTotals) + taxTotal);
 
     return this.prisma.client.$transaction(async (tx) => {
-      const invoiceNumber = await this.allocateNumber(organizationId, tx);
+      const invoiceFormat = orgSetting?.invoiceNumberFormat ?? 'INV-{YYYY}-{SEQ:6}';
+      const invoiceNumber = await this.allocateNumber(organizationId, tx, invoiceFormat);
 
       const invoice = await tx.saleInvoice.create({
         data: {

@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient, Role, UserStatus } from '../src/generated/prisma/client.js';
 import { slugify } from '../src/common/helpers/slugify.js';
+import { seedChartOfAccounts } from '../src/modules/accounting/chart-of-accounts.js';
 import argon2 from 'argon2';
 
 /**
@@ -42,7 +43,7 @@ async function main() {
     const organization = await tx.organization.create({
       data: { name: orgName, slug: `${slugify(orgName)}-seed` },
     });
-    await tx.user.create({
+    const user = await tx.user.create({
       data: {
         organizationId: organization.id,
         email,
@@ -52,6 +53,16 @@ async function main() {
         status: UserStatus.ACTIVE,
         emailVerifiedAt: new Date(),
         preferences: { language: 'en', timezone: 'Africa/Nairobi' },
+      },
+    });
+    await seedChartOfAccounts(tx, organization.id, user.id);
+    await tx.organizationSetting.create({
+      data: {
+        organizationId: organization.id,
+        taxRate: process.env.SEED_TAX_RATE ?? '16.00',
+        currency: 'KES',
+        invoiceNumberFormat: 'INV-{YYYY}-{SEQ:6}',
+        defaultPaymentTermsDays: 30,
       },
     });
   });

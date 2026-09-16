@@ -1,9 +1,4 @@
-import {
-  Controller,
-  Get,
-  ParseIntPipe,
-  Query,
-} from '@nestjs/common';
+import { Controller, Get, ParseIntPipe, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import type { AuthenticatedUser } from '../../common/decorators/current-user.decorator.js';
@@ -35,6 +30,28 @@ export class ReportingController {
   @Get('payables')
   payables(@CurrentUser() user: AuthenticatedUser) {
     return this.reporting.payables(user.orgId);
+  }
+
+  /** Aged receivables by customer (30/60/90-day buckets). */
+  @Get('receivables/aged')
+  agedReceivables(@CurrentUser() user: AuthenticatedUser) {
+    return this.reporting.agedReceivables(user.orgId);
+  }
+
+  /** Aged payables by supplier (30/60/90-day buckets). */
+  @Get('payables/aged')
+  agedPayables(@CurrentUser() user: AuthenticatedUser) {
+    return this.reporting.agedPayables(user.orgId);
+  }
+
+  /** Period-based VAT summary. */
+  @Get('tax-summary')
+  taxSummary(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+  ) {
+    return this.reporting.taxSummary(user.orgId, startDate, endDate);
   }
 
   /** Top-selling items over a period. */

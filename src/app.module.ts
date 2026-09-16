@@ -22,10 +22,16 @@ import { ApiKeysModule } from './modules/api-keys/api-keys.module.js';
 import { InventoryModule } from './modules/inventory/inventory.module.js';
 import { PartiesModule } from './modules/parties/parties.module.js';
 import { SalesModule } from './modules/sales/sales.module.js';
+import { CreditNotesModule } from './modules/credit-notes/credit-notes.module.js';
 import { PurchasingModule } from './modules/purchasing/purchasing.module.js';
+import { PurchaseOrdersModule } from './modules/purchase-orders/purchase-orders.module.js';
+import { GoodsReceiptsModule } from './modules/goods-receipts/goods-receipts.module.js';
+import { QuotationsModule } from './modules/quotations/quotations.module.js';
+import { NotificationsModule } from './modules/notifications/notifications.module.js';
 import { EtimsModule } from './modules/etims/etims.module.js';
 import { ReportingModule } from './modules/reporting/reporting.module.js';
 import { AccountingModule } from './modules/accounting/accounting.module.js';
+import { BankingModule } from './modules/banking/banking.module.js';
 import { HealthModule } from './health/health.module.js';
 import { EventsModule } from './events/events.module.js';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
@@ -81,10 +87,16 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
     InventoryModule,
     PartiesModule,
     SalesModule,
+    QuotationsModule,
+    CreditNotesModule,
     PurchasingModule,
+    PurchaseOrdersModule,
+    GoodsReceiptsModule,
+    NotificationsModule,
     EtimsModule,
     ReportingModule,
     AccountingModule,
+    BankingModule,
     HealthModule,
     CommonModule,
   ],

@@ -37,8 +37,8 @@ export class UpdateOrganizationSettingsDto {
 
   @IsOptional()
   @IsString()
-  @Matches(/^[A-Z{}:_#-]+$/, {
-    message: 'invoiceNumberFormat must look like INV-YYYY-######',
+  @Matches(/^[A-Z0-9{}:_#-]+$/, {
+    message: 'invoiceNumberFormat must look like INV-{YYYY}-{SEQ:6}',
   })
   @MaxLength(60)
   invoiceNumberFormat?: string;

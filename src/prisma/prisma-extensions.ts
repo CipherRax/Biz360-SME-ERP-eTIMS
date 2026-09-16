@@ -20,6 +20,7 @@ const SOFT_DELETE_MODELS = new Set<Prisma.ModelName>([
   Prisma.ModelName.Item,
   Prisma.ModelName.Party,
   Prisma.ModelName.Account,
+  Prisma.ModelName.BankAccount,
 ]);
 
 /** Models whose rows are scoped to a tenant via `organizationId`. */
@@ -49,6 +50,22 @@ const TENANT_MODELS = new Set<Prisma.ModelName>([
   Prisma.ModelName.JournalEntry,
   Prisma.ModelName.JournalEntryLine,
   Prisma.ModelName.JournalEntrySeq,
+  Prisma.ModelName.Quotation,
+  Prisma.ModelName.QuotationLine,
+  Prisma.ModelName.QuotationNumberSeq,
+  Prisma.ModelName.PurchaseOrder,
+  Prisma.ModelName.PurchaseOrderLine,
+  Prisma.ModelName.PurchaseOrderNumberSeq,
+  Prisma.ModelName.GoodsReceipt,
+  Prisma.ModelName.GoodsReceiptLine,
+  Prisma.ModelName.GoodsReceiptNumberSeq,
+  Prisma.ModelName.CreditNote,
+  Prisma.ModelName.CreditNoteLine,
+  Prisma.ModelName.CreditNoteNumberSeq,
+  Prisma.ModelName.BankAccount,
+  Prisma.ModelName.BankStatementLine,
+  Prisma.ModelName.BankReconciliation,
+  Prisma.ModelName.Notification,
 ]);
 
 /** Models that record `createdBy` / `updatedBy` actor ids. */
@@ -60,6 +77,10 @@ const AUDITED_MODELS = new Set<Prisma.ModelName>([
   Prisma.ModelName.PurchaseInvoice,
   Prisma.ModelName.Account,
   Prisma.ModelName.JournalEntry,
+  Prisma.ModelName.Quotation,
+  Prisma.ModelName.PurchaseOrder,
+  Prisma.ModelName.GoodsReceipt,
+  Prisma.ModelName.CreditNote,
 ]);
 
 type Jsonish = Record<string, unknown>;

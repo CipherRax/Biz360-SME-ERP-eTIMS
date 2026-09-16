@@ -116,6 +116,7 @@ export class UsersService {
 
     const data: { role?: Role; status?: UserStatus } = {};
     if (dto.role) data.role = dto.role;
+    if (dto.status) data.status = dto.status;
 
     return this.prisma.client.user.update({
       where: { id: targetUserId },

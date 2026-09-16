@@ -122,7 +122,7 @@ export class AuthService {
           organizationId: organization.id,
           taxRate: process.env.DEFAULT_TAX_RATE ?? '16.00',
           currency: 'KES',
-          invoiceNumberFormat: 'INV-YYYY-######',
+          invoiceNumberFormat: 'INV-{YYYY}-{SEQ:6}',
           defaultPaymentTermsDays: 30,
         },
       });

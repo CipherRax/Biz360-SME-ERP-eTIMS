@@ -17,6 +17,7 @@ describe('eTIMS submission (e2e)', () => {
     process.env.LOG_LEVEL = 'silent';
     process.env.OUTBOX_POLL_INTERVAL_MS = '250';
     process.env.ETIMS_MODE = 'mock';
+    process.env.ETIMS_DEVICE_SERIAL = '';
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
