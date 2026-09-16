@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module.js';
 import { correlationIdMiddleware } from './common/middleware/correlation-id.middleware.js';
+import { enrichOpenApiWithExamples } from './common/swagger/examples.js';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
@@ -42,7 +43,7 @@ async function bootstrap() {
     .setVersion('0.1.0')
     .addBearerAuth()
     .build();
-  const document = SwaggerModule.createDocument(app, swagger);
+  const document = enrichOpenApiWithExamples(SwaggerModule.createDocument(app, swagger));
   SwaggerModule.setup(`${prefix}/docs`, app, document, {
     swaggerOptions: { persistAuthorization: true },
   });
