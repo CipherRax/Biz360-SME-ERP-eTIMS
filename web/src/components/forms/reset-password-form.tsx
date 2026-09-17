@@ -8,7 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { KeyRound } from 'lucide-react';
 import { Button, Field, Input, useToast } from '@/components/ui';
-import { api } from '@/lib/api';
+import { resetPassword } from '@/lib/auth/public-auth';
 import { ApiError } from '@/lib/api/http';
 
 const schema = z
@@ -60,7 +60,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
   const onSubmit = handleSubmit(async (values) => {
     setFormError(null);
     try {
-      await api.post('/auth/password/reset', { token, newPassword: values.newPassword }, { skipAuth: true });
+      await resetPassword(token, values.newPassword);
       toast({ tone: 'success', title: 'Password updated', description: 'Sign in with your new password.' });
       router.push('/login');
     } catch (error) {

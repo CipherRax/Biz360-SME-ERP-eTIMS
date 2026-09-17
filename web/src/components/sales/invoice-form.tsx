@@ -23,23 +23,27 @@ import {
 } from '@/components/ui';
 import { inventoryApi, partiesApi, salesApi } from '@/lib/api';
 import { ApiError } from '@/lib/api/http';
-import { formatMoney } from '@/lib/utils/format';
+import { formatMoney, formatNumber } from '@/lib/utils/format';
 import { newIdempotencyKey } from '@/lib/utils/idempotency';
 
 const lineSchema = z.object({
   itemId: z.string().optional().or(z.literal('')),
-  description: z.string().max(300).optional().or(z.literal('')),
-  quantity: z.string().regex(/^\d+(\.\d{1,3})?$/, 'Required'),
-  unitPrice: z.string().regex(/^\d+(\.\d{1,2})?$/, 'Required'),
-  taxRate: z.string().regex(/^\d+(\.\d{1,2})?$/, 'Required'),
-  discountPct: z.string().regex(/^\d+(\.\d{1,2})?$/, 'Use 0–100').optional().or(z.literal('')),
+  description: z.string().max(500).optional().or(z.literal('')),
+  quantity: z.string().regex(/^\d{1,9}(\.\d{1,3})?$/, 'Required'),
+  unitPrice: z.string().regex(/^\d{1,9}(\.\d{1,2})?$/, 'Required'),
+  taxRate: z.string().regex(/^\d{1,2}(\.\d{1,2})?$/, 'Required'),
+  discountPct: z
+    .string()
+    .regex(/^\d{1,2}(\.\d{1,2})?$/, 'Use 0–100')
+    .optional()
+    .or(z.literal('')),
 });
 
 const schema = z
   .object({
     partyId: z.string().min(1, 'Select a customer'),
     invoiceDate: z.string().min(1, 'Required'),
-    notes: z.string().max(500).optional().or(z.literal('')),
+    notes: z.string().max(2000).optional().or(z.literal('')),
     lines: z.array(lineSchema).min(1, 'Add at least one line'),
   })
   .superRefine((values, ctx) => {
@@ -204,10 +208,25 @@ export function InvoiceForm() {
               </Button>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              {fields.map((field, index) => (
+              {fields.map((field, index) => {
+                const selectedItem = itemIndex.get(watchedLines?.[index]?.itemId ?? '');
+                const tracked = selectedItem ? selectedItem.trackStock !== false : false;
+                const available = tracked ? Number(selectedItem?.stockOnHand ?? 0) : undefined;
+                const requested = Number(watchedLines?.[index]?.quantity) || 0;
+                const insufficient = available !== undefined && requested > available;
+                return (
                 <div key={field.id} className="rounded-lg border border-ink-100 p-4">
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-12">
-                    <Field label="Item" htmlFor={`lines.${index}.itemId`} className="sm:col-span-5">
+                    <Field
+                      label="Item"
+                      htmlFor={`lines.${index}.itemId`}
+                      className="sm:col-span-5"
+                      hint={
+                        available !== undefined
+                          ? `In stock: ${formatNumber(available, 0)} ${selectedItem?.baseUnit ?? ''}`.trim()
+                          : undefined
+                      }
+                    >
                       <Select
                         id={`lines.${index}.itemId`}
                         {...register(`lines.${index}.itemId` as const)}
@@ -233,6 +252,11 @@ export function InvoiceForm() {
                     </Field>
                     <Field label="Qty" htmlFor={`lines.${index}.quantity`} error={errors.lines?.[index]?.quantity?.message} className="sm:col-span-3">
                       <Input id={`lines.${index}.quantity`} inputMode="decimal" {...register(`lines.${index}.quantity` as const)} />
+                      {insufficient ? (
+                        <p className="text-xs font-medium text-error" role="alert">
+                          Only {formatNumber(available ?? 0, 0)} in stock — add stock or mark the item as a service.
+                        </p>
+                      ) : null}
                     </Field>
                     <Field label="Unit price" htmlFor={`lines.${index}.unitPrice`} error={errors.lines?.[index]?.unitPrice?.message} className="sm:col-span-3">
                       <Input id={`lines.${index}.unitPrice`} inputMode="decimal" {...register(`lines.${index}.unitPrice` as const)} />
@@ -258,7 +282,8 @@ export function InvoiceForm() {
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
               {errors.lines?.message ? (
                 <p className="text-xs font-medium text-error" role="alert">
                   {errors.lines.message}

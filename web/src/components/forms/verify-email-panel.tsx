@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { CheckCircle2, XCircle } from 'lucide-react';
 import { PageLoader } from '@/components/ui';
-import { api } from '@/lib/api';
+import { verifyEmail } from '@/lib/auth/public-auth';
 import { ApiError } from '@/lib/api/http';
 
 type State = 'verifying' | 'success' | 'error';
@@ -19,8 +19,7 @@ export function VerifyEmailPanel({ token }: { token: string }) {
   useEffect(() => {
     if (!token || ran.current) return;
     ran.current = true;
-    void api
-      .post('/auth/verify-email', { token }, { skipAuth: true })
+    void verifyEmail(token)
       .then(() => {
         setState('success');
       })

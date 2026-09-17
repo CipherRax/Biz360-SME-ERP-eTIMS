@@ -6,6 +6,7 @@ import type {
   Notification,
   Organization,
   OrganizationSetting,
+  SessionDevice,
   StatementLine,
   UserRecord,
 } from '@/types/domain';
@@ -38,6 +39,12 @@ export const usersApi = {
     api.patch<UserRecord>('/users/me', input),
   update: (id: string, input: UpdateUserInput) => api.patch<UserRecord>(`/users/${id}`, input),
   remove: (id: string) => api.delete<void>(`/users/${id}`),
+};
+
+export const sessionsApi = {
+  list: () => api.get<SessionDevice[]>('/auth/sessions'),
+  revoke: (id: string) => api.delete<void>(`/auth/sessions/${id}`),
+  revokeAll: () => api.delete<void>('/auth/sessions'),
 };
 
 export const organizationsApi = {

@@ -340,14 +340,14 @@ export class SalesService {
         if (!line.itemId) continue;
         const item = await tx.item.findFirst({
           where: { id: line.itemId, organizationId },
-          select: { id: true, stockOnHand: true, trackStock: true, buyPrice: true },
+          select: { id: true, name: true, stockOnHand: true, trackStock: true, buyPrice: true },
         });
         if (!item || !item.trackStock) continue;
         const onHand = Number(item.stockOnHand);
         const qty = Number(line.quantity);
         if (onHand < qty) {
           throw new ConflictException(
-            `Insufficient stock for item ${item.id}: on hand ${onHand}, requested ${qty}`,
+            `Insufficient stock for ${item.name}: ${onHand} on hand, ${qty} requested. Add stock (or mark the item as a service) before confirming.`,
           );
         }
         await tx.item.update({

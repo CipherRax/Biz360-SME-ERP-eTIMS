@@ -37,8 +37,14 @@ export default function ReportsPage() {
   const [range] = useState({ startDate: startOfMonth(), endDate: today() });
 
   const dashboard = useQuery({ queryKey: ['reports', 'dashboard'], queryFn: () => reportingApi.dashboard() });
-  const receivables = useQuery({ queryKey: ['reports', 'receivables'], queryFn: () => reportingApi.receivables() });
-  const payables = useQuery({ queryKey: ['reports', 'payables'], queryFn: () => reportingApi.payables() });
+  const receivables = useQuery({
+    queryKey: ['reports', 'receivables', 'aged'],
+    queryFn: () => reportingApi.agedReceivables(),
+  });
+  const payables = useQuery({
+    queryKey: ['reports', 'payables', 'aged'],
+    queryFn: () => reportingApi.agedPayables(),
+  });
   const tax = useQuery({
     queryKey: ['reports', 'tax', range],
     queryFn: () => reportingApi.taxSummary(range.startDate, range.endDate),
@@ -55,7 +61,7 @@ export default function ReportsPage() {
 
   const renderAged = (data: { parties: AgedPartiesRow[]; totalOutstanding: number } | undefined, loading: boolean, empty: string) => {
     if (loading) return <SkeletonTable rows={4} columns={6} />;
-    if (!data || data.parties.length === 0) {
+    if (!data || !Array.isArray(data.parties) || data.parties.length === 0) {
       return <EmptyState icon={HandCoins} title="Nothing outstanding" description={empty} />;
     }
     return (

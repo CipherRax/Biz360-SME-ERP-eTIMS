@@ -54,6 +54,7 @@ export interface ItemInput {
   taxCode?: string;
   reorderLevel?: string;
   active?: boolean;
+  trackStock?: boolean;
 }
 
 export interface InvoiceInput {

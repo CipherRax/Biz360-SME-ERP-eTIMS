@@ -70,4 +70,8 @@ export class ItemDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  trackStock?: boolean;
 }

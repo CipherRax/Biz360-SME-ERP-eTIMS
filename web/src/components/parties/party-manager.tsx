@@ -30,15 +30,19 @@ import type { Party, PartyType } from '@/types/domain';
 import type { ColumnDef } from '@tanstack/react-table';
 
 const schema = z.object({
-  name: z.string().min(2, 'Name is required'),
-  email: z.string().email('Enter a valid email').optional().or(z.literal('')),
+  name: z.string().min(2, 'Name is required').max(160, 'Name is too long'),
+  email: z.string().email('Enter a valid email').max(120).optional().or(z.literal('')),
   phone: z.string().max(30).optional().or(z.literal('')),
-  taxId: z.string().max(30).optional().or(z.literal('')),
+  taxId: z
+    .string()
+    .regex(/^[A-Za-z0-9]{10,11}$/, 'KRA PIN should be 10–11 letters or digits')
+    .optional()
+    .or(z.literal('')),
   addressLine1: z.string().max(160).optional().or(z.literal('')),
   city: z.string().max(80).optional().or(z.literal('')),
   creditLimit: z
     .string()
-    .regex(/^\d*(\.\d{0,2})?$/, 'Use a number like 50000.00')
+    .regex(/^\d{1,6}(\.\d{1,2})?$/, 'Use a number like 50000.00 (max 6 digits)')
     .optional()
     .or(z.literal('')),
   notes: z.string().max(500).optional().or(z.literal('')),

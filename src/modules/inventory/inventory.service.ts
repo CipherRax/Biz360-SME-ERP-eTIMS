@@ -16,6 +16,7 @@ const ITEM_SAFE_FIELDS = {
   sellPrice: true,
   taxCode: true,
   stockOnHand: true,
+  trackStock: true,
   reorderLevel: true,
   active: true,
   createdAt: true,
@@ -101,6 +102,7 @@ export class InventoryService {
         taxCode: dto.taxCode ?? null,
         reorderLevel: dto.reorderLevel ?? null,
         active: dto.active ?? true,
+        ...(dto.trackStock !== undefined ? { trackStock: dto.trackStock } : {}),
       },
       select: ITEM_SAFE_FIELDS,
     });
@@ -134,6 +136,7 @@ export class InventoryService {
         ...(dto.taxCode !== undefined ? { taxCode: dto.taxCode } : {}),
         ...(dto.reorderLevel !== undefined ? { reorderLevel: dto.reorderLevel } : {}),
         ...(dto.active !== undefined ? { active: dto.active } : {}),
+        ...(dto.trackStock !== undefined ? { trackStock: dto.trackStock } : {}),
       },
       select: ITEM_SAFE_FIELDS,
     });

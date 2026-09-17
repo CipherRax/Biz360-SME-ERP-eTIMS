@@ -8,6 +8,7 @@ export { etimsApi } from './etims';
 export { reportingApi } from './reporting';
 export {
   usersApi,
+  sessionsApi,
   organizationsApi,
   apiKeysApi,
   notificationsApi,

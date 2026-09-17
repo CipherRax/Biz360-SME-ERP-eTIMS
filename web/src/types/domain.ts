@@ -152,6 +152,7 @@ export interface Item {
   sellPrice?: string | null;
   taxCode?: string | null;
   stockOnHand: number;
+  trackStock?: boolean;
   reorderLevel?: string | null;
   active: boolean;
   createdAt: string;

@@ -9,17 +9,20 @@ import {
   FileText,
   Package,
   ShieldCheck,
+  Sparkles,
   TrendingUp,
   Users,
 } from 'lucide-react';
 import {
   Badge,
+  Button,
   buttonClasses,
   Card,
   CardContent,
   CardHeader,
   CardTitle,
   DataTable,
+  EmptyState,
   Skeleton,
   StatCard,
 } from '@/components/ui';
@@ -81,6 +84,14 @@ export default function DashboardPage() {
   });
 
   const data = kpis.data;
+  const hasActivity =
+    Boolean(data) &&
+    (data!.salesThisMonth > 0 ||
+      data!.invoicesThisMonth > 0 ||
+      data!.stockUnits > 0 ||
+      data!.receivables > 0 ||
+      data!.payables > 0 ||
+      data!.unsubmittedEtimsInvoices > 0);
 
   return (
     <div className="flex flex-col gap-6">
@@ -99,50 +110,62 @@ export default function DashboardPage() {
         </div>
       </HeroBand>
 
-      {kpis.isError ? (
-        <Card className="border-error/30 bg-error/5">
-          <CardContent className="py-6 text-sm text-error">
-            Could not load dashboard metrics. Please refresh the page.
-          </CardContent>
-        </Card>
-      ) : null}
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {kpis.isLoading || !data ? (
-          Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-32" />)
-        ) : (
-          <>
-            <StatCard
-              label="Sales this month"
-              value={formatMoney(data.salesThisMonth)}
-              icon={TrendingUp}
-              tone="brand"
-              hint={`${formatNumber(data.invoicesThisMonth, 0)} invoices issued`}
-            />
-            <StatCard
-              label="Receivables"
-              value={formatMoney(data.receivables)}
-              icon={Users}
-              tone="info"
-              hint="Outstanding from customers"
-            />
-            <StatCard
-              label="Stock valuation"
-              value={formatMoney(data.stockValuation)}
-              icon={Package}
-              tone="success"
-              hint={`${formatNumber(data.stockUnits, 0)} units on hand`}
-            />
-            <StatCard
-              label="Pending eTIMS"
-              value={formatNumber(data.unsubmittedEtimsInvoices, 0)}
-              icon={ShieldCheck}
-              tone={data.unsubmittedEtimsInvoices > 0 ? 'warning' : 'neutral'}
-              hint="Invoices awaiting KRA submission"
-            />
-          </>
-        )}
-      </div>
+      {kpis.isLoading ? (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <Skeleton key={index} className="h-32" />
+          ))}
+        </div>
+      ) : kpis.isError || !hasActivity ? (
+        <EmptyState
+          icon={Sparkles}
+          title="Nothing to show yet"
+          description="Once you issue your first invoice, adjust stock or record a payment, your key numbers will appear here."
+          action={
+            <div className="flex flex-wrap justify-center gap-2">
+              <Link href="/sales/invoices/new" className={buttonClasses()}>
+                Create an invoice
+              </Link>
+              {kpis.isError ? (
+                <Button variant="secondary" onClick={() => void kpis.refetch()}>
+                  Try again
+                </Button>
+              ) : null}
+            </div>
+          }
+        />
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Sales this month"
+            value={formatMoney(data!.salesThisMonth)}
+            icon={TrendingUp}
+            tone="brand"
+            hint={`${formatNumber(data!.invoicesThisMonth, 0)} invoices issued`}
+          />
+          <StatCard
+            label="Receivables"
+            value={formatMoney(data!.receivables)}
+            icon={Users}
+            tone="info"
+            hint="Outstanding from customers"
+          />
+          <StatCard
+            label="Stock valuation"
+            value={formatMoney(data!.stockValuation)}
+            icon={Package}
+            tone="success"
+            hint={`${formatNumber(data!.stockUnits, 0)} units on hand`}
+          />
+          <StatCard
+            label="Pending eTIMS"
+            value={formatNumber(data!.unsubmittedEtimsInvoices, 0)}
+            icon={ShieldCheck}
+            tone={data!.unsubmittedEtimsInvoices > 0 ? 'warning' : 'neutral'}
+            hint="Invoices awaiting KRA submission"
+          />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">

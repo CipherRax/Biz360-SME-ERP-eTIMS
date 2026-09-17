@@ -116,25 +116,23 @@ export function TopNav({ onOpenMenu }: { onOpenMenu?: () => void }) {
                   role="menu"
                   className="absolute right-0 z-50 mt-2 w-56 overflow-hidden rounded-xl border border-ink-300/60 bg-white py-1 shadow-lg"
                 >
+                  <Link
+                    href="/settings/profile"
+                    role="menuitem"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-4 py-2 text-sm text-ink-700 hover:bg-ink-100"
+                  >
+                    Profile
+                  </Link>
                   {hasRole('ADMIN') ? (
-                    <>
-                      <Link
-                        href="/settings/profile"
-                        role="menuitem"
-                        onClick={() => setMenuOpen(false)}
-                        className="block px-4 py-2 text-sm text-ink-700 hover:bg-ink-100"
-                      >
-                        Profile
-                      </Link>
-                      <Link
-                        href="/settings"
-                        role="menuitem"
-                        onClick={() => setMenuOpen(false)}
-                        className="block px-4 py-2 text-sm text-ink-700 hover:bg-ink-100"
-                      >
-                        Organization settings
-                      </Link>
-                    </>
+                    <Link
+                      href="/settings"
+                      role="menuitem"
+                      onClick={() => setMenuOpen(false)}
+                      className="block px-4 py-2 text-sm text-ink-700 hover:bg-ink-100"
+                    >
+                      Organization settings
+                    </Link>
                   ) : null}
                   <button
                     type="button"

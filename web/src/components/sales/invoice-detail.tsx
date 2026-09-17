@@ -36,15 +36,15 @@ import { newIdempotencyKey } from '@/lib/utils/idempotency';
 import type { Invoice, PaymentMethod } from '@/types/domain';
 
 const paymentSchema = z.object({
-  amount: z.string().regex(/^\d+(\.\d{1,2})?$/, 'Enter an amount like 1500.00'),
+  amount: z.string().regex(/^\d{1,9}(\.\d{1,2})?$/, 'Enter an amount like 1500.00'),
   method: z.enum(['CASH', 'M_PESA', 'BANK_TRANSFER', 'CARD', 'CHEQUE']),
-  reference: z.string().max(80).optional().or(z.literal('')),
-  notes: z.string().max(300).optional().or(z.literal('')),
+  reference: z.string().max(100).optional().or(z.literal('')),
+  notes: z.string().max(500).optional().or(z.literal('')),
 });
 
 type PaymentValues = z.infer<typeof paymentSchema>;
 
-const voidSchema = z.object({ reason: z.string().min(3, 'Provide a reason for voiding').max(300) });
+const voidSchema = z.object({ reason: z.string().min(2, 'Provide a reason for voiding').max(200) });
 type VoidValues = z.infer<typeof voidSchema>;
 
 export function InvoiceDetail({ id }: { id: string }) {

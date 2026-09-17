@@ -29,15 +29,32 @@ import type { Item } from '@/types/domain';
 import type { ColumnDef } from '@tanstack/react-table';
 
 const schema = z.object({
-  name: z.string().min(2, 'Name is required'),
-  sku: z.string().max(60).optional().or(z.literal('')),
+  name: z.string().min(2, 'Name is required').max(120, 'Name is too long'),
+  sku: z
+    .string()
+    .regex(/^[a-zA-Z0-9][a-zA-Z0-9-]{0,63}$/, 'Use letters, digits and dashes (max 64)')
+    .optional()
+    .or(z.literal('')),
   categoryId: z.string().optional().or(z.literal('')),
-  baseUnit: z.string().max(20).optional().or(z.literal('')),
-  buyPrice: z.string().regex(/^\d*(\.\d{0,2})?$/, 'Use a number like 1200.00').optional().or(z.literal('')),
-  sellPrice: z.string().regex(/^\d*(\.\d{0,2})?$/, 'Use a number like 1500.00').optional().or(z.literal('')),
-  taxCode: z.string().max(20).optional().or(z.literal('')),
-  reorderLevel: z.string().regex(/^\d*(\.\d{0,2})?$/, 'Use a number').optional().or(z.literal('')),
-  description: z.string().max(500).optional().or(z.literal('')),
+  baseUnit: z.string().max(10, 'Unit is too long').optional().or(z.literal('')),
+  buyPrice: z
+    .string()
+    .regex(/^\d{1,6}(\.\d{1,2})?$/, 'Use a number like 1200.00')
+    .optional()
+    .or(z.literal('')),
+  sellPrice: z
+    .string()
+    .regex(/^\d{1,6}(\.\d{1,2})?$/, 'Use a number like 1500.00')
+    .optional()
+    .or(z.literal('')),
+  taxCode: z.string().max(10).optional().or(z.literal('')),
+  reorderLevel: z
+    .string()
+    .regex(/^\d{1,9}(\.\d{1,3})?$/, 'Use a number')
+    .optional()
+    .or(z.literal('')),
+  description: z.string().max(2000).optional().or(z.literal('')),
+  trackStock: z.boolean(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -45,8 +62,8 @@ type FormValues = z.infer<typeof schema>;
 const stockSchema = z.object({
   quantity: z
     .string()
-    .regex(/^-?\d+(\.\d{1,3})?$/, 'Use a number, e.g. 10 or -2.5'),
-  reason: z.string().max(200).optional().or(z.literal('')),
+    .regex(/^-?\d{1,9}(\.\d{1,3})?$/, 'Use a number, e.g. 10 or -2.5'),
+  reason: z.string().max(500).optional().or(z.literal('')),
 });
 
 type StockValues = z.infer<typeof stockSchema>;
@@ -89,6 +106,7 @@ export function ItemManager() {
       taxCode: '',
       reorderLevel: '',
       description: '',
+      trackStock: true,
     },
   });
 
@@ -115,6 +133,7 @@ export function ItemManager() {
       taxCode: item.taxCode ?? '',
       reorderLevel: item.reorderLevel ?? '',
       description: item.description ?? '',
+      trackStock: item.trackStock ?? true,
     });
     setModalOpen(true);
   };
@@ -131,6 +150,7 @@ export function ItemManager() {
         taxCode: values.taxCode?.trim() || undefined,
         reorderLevel: values.reorderLevel?.trim() || undefined,
         description: values.description?.trim() || undefined,
+        trackStock: values.trackStock,
       };
       return editing
         ? inventoryApi.items.update(editing.id, payload)
@@ -198,6 +218,9 @@ export function ItemManager() {
         accessorKey: 'stockOnHand',
         header: 'On hand',
         cell: ({ row }) => {
+          if (row.original.trackStock === false) {
+            return <Badge tone="muted">Service</Badge>;
+          }
           const reorder = row.original.reorderLevel ? Number(row.original.reorderLevel) : 0;
           const low = reorder > 0 && row.original.stockOnHand <= reorder;
           return (
@@ -226,6 +249,7 @@ export function ItemManager() {
               variant="ghost"
               size="icon"
               aria-label="Adjust stock"
+              disabled={row.original.trackStock === false}
               onClick={() => {
                 setStockItem(row.original);
                 stockForm.reset({ quantity: '', reason: '' });
@@ -329,6 +353,19 @@ export function ItemManager() {
           <Field label="Description" htmlFor="description" error={form.formState.errors.description?.message} className="sm:col-span-2">
             <Textarea id="description" rows={3} {...form.register('description')} />
           </Field>
+          <label className="flex items-start gap-3 sm:col-span-2">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 rounded border-ink-300 accent-brand"
+              {...form.register('trackStock')}
+            />
+            <span className="text-sm text-ink-700">
+              Track stock in inventory
+              <span className="block text-xs text-ink-500">
+                Uncheck for services and non-stock items — they can be invoiced without on-hand stock.
+              </span>
+            </span>
+          </label>
         </form>
       </Modal>
 

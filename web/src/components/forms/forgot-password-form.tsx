@@ -7,7 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { MailCheck } from 'lucide-react';
 import { Button, Field, Input } from '@/components/ui';
-import { api } from '@/lib/api';
+import { forgotPassword } from '@/lib/auth/public-auth';
 import { ApiError } from '@/lib/api/http';
 
 const schema = z.object({
@@ -29,7 +29,7 @@ export function ForgotPasswordForm() {
   const onSubmit = handleSubmit(async (values) => {
     setFormError(null);
     try {
-      await api.post('/auth/password/forgot', { email: values.email.trim().toLowerCase() }, { skipAuth: true });
+      await forgotPassword(values.email.trim().toLowerCase());
       setSent(true);
     } catch (error) {
       // Endpoint is enumeration-safe and normally 200s; only surface transport errors.

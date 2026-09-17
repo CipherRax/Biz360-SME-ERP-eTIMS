@@ -37,21 +37,33 @@ import { newIdempotencyKey } from '@/lib/utils/idempotency';
 import type { ApiKey, Role } from '@/types/domain';
 
 const orgSchema = z.object({
-  name: z.string().min(2, 'Name is required').max(160),
-  taxPin: z.string().max(30).optional().or(z.literal('')),
-  contactEmail: z.string().email('Enter a valid email').optional().or(z.literal('')),
-  contactPhone: z.string().max(30).optional().or(z.literal('')),
+  name: z.string().min(2, 'Name is required').max(120, 'Name is too long'),
+  taxPin: z.string().max(16, 'PIN is too long').optional().or(z.literal('')),
+  contactEmail: z.string().email('Enter a valid email').max(160).optional().or(z.literal('')),
+  contactPhone: z
+    .string()
+    .regex(/^\+[1-9]\d{7,14}$/, 'Use international format, e.g. +254712345678')
+    .optional()
+    .or(z.literal('')),
 });
 
 const settingsSchema = z.object({
-  taxRate: z.string().regex(/^\d+(\.\d{1,2})?$/, 'e.g. 16'),
-  invoiceNumberFormat: z.string().min(1).max(60),
+  taxRate: z.string().regex(/^\d{1,3}(\.\d{1,2})?$/, 'e.g. 16 or 16.00'),
+  invoiceNumberFormat: z
+    .string()
+    .min(1)
+    .max(60)
+    .regex(/^[A-Z0-9{}:_#-]+$/, 'Use uppercase letters, digits and - _ : # { } only'),
   defaultPaymentTermsDays: z.string().regex(/^\d+$/, 'Whole number of days'),
-  financialYearStart: z.string().max(5).optional().or(z.literal('')),
+  financialYearStart: z
+    .string()
+    .regex(/^\d{2}-\d{2}$/, 'Use MM-DD')
+    .optional()
+    .or(z.literal('')),
 });
 
 const userSchema = z.object({
-  name: z.string().min(2, 'Name is required'),
+  name: z.string().min(2, 'Name is required').max(120, 'Name is too long'),
   email: z.string().email('Enter a valid email'),
   password: z
     .string()
@@ -63,7 +75,14 @@ const userSchema = z.object({
 
 const keySchema = z.object({
   name: z.string().min(2, 'Name is required').max(80),
-  expiresInDays: z.string().regex(/^\d*$/, 'Whole number').optional().or(z.literal('')),
+  expiresInDays: z
+    .string()
+    .regex(/^\d*$/, 'Whole number')
+    .refine((value) => value === '' || (Number(value) >= 1 && Number(value) <= 3650), {
+      message: 'Enter 1–3650 days',
+    })
+    .optional()
+    .or(z.literal('')),
 });
 
 type OrgValues = z.infer<typeof orgSchema>;
@@ -235,8 +254,8 @@ export default function SettingsPage() {
                 <Field label="KRA PIN" htmlFor="taxPin" error={orgForm.formState.errors.taxPin?.message}>
                   <Input id="taxPin" placeholder="P051234567X" {...orgForm.register('taxPin')} />
                 </Field>
-                <Field label="Contact phone" htmlFor="contactPhone" error={orgForm.formState.errors.contactPhone?.message}>
-                  <Input id="contactPhone" {...orgForm.register('contactPhone')} />
+                <Field label="Contact phone" htmlFor="contactPhone" error={orgForm.formState.errors.contactPhone?.message} hint="International format, e.g. +254712345678">
+                  <Input id="contactPhone" placeholder="+254712345678" {...orgForm.register('contactPhone')} />
                 </Field>
                 <Field label="Contact email" htmlFor="contactEmail" error={orgForm.formState.errors.contactEmail?.message} className="sm:col-span-2">
                   <Input id="contactEmail" type="email" {...orgForm.register('contactEmail')} />
