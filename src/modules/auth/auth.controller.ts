@@ -9,6 +9,7 @@ import {
   HttpStatus,
   Ip,
   Param,
+  ParseUUIDPipe,
   Post,
 } from '@nestjs/common';
 import { Request } from 'express';
@@ -122,7 +123,7 @@ export class AuthController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async revokeSession(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('id') id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
   ) {
     if (!user) throw new BadRequestException('Not authenticated');
     await this.auth.revokeSession(id, user.sub, user.orgId);

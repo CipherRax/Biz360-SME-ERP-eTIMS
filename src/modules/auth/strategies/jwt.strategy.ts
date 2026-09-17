@@ -19,6 +19,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
       secretOrKey: config.getOrThrow<string>('auth.accessSecret'),
+      issuer: 'biz360-erp',
+      audience: 'biz360-erp-api',
+      algorithms: ['HS256'],
     });
   }
 

@@ -266,6 +266,8 @@ model User {
   name            String
   role            Role         @default(STAFF)
   status          UserStatus   @default(PENDING)
+  failedLoginAttempts Int      @default(0)
+  lockedUntil     DateTime?
   preferences     Json?
   emailVerifiedAt DateTime?
   lastLoginAt     DateTime?
@@ -319,6 +321,7 @@ model EmailVerificationToken {
   createdAt      DateTime     @default(now())
 
   @@index([userId])
+  @@index([organizationId])
   @@map("email_verification_tokens")
 }
 
@@ -334,6 +337,7 @@ model PasswordResetToken {
   createdAt      DateTime     @default(now())
 
   @@index([userId])
+  @@index([organizationId])
   @@map("password_reset_tokens")
 }
 

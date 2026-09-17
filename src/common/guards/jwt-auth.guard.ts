@@ -2,7 +2,8 @@ import { ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/com
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 import { Request } from 'express';
-import { Role } from '../../generated/prisma/client.js';
+import { Role, UserStatus } from '../../generated/prisma/client.js';
+import { PrismaService } from '../../prisma/prisma.service.js';
 import { ApiKeysService } from '../../modules/api-keys/api-keys.service.js';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator.js';
 import { getScope } from '../context/request-context.js';
@@ -23,6 +24,11 @@ function extractApiKey(authorization?: string): string | null {
  *  - a valid bearer JWT (passport strategy) — an interactive user session;
  *  - a tenant API key (`erp_…`) — machine-to-machine, treated as READ_ONLY
  *    until scope-based authorization is layered on.
+ *
+ * Every authenticated request re-checks the bound user's DB status so a
+ * suspended or deleted account is rejected immediately, even if its access
+ * token has not yet expired.
+ *
  * On success the actor/tenant is published to the AsyncLocalStorage request
  * scope so tenant isolation and audit columns apply transparently.
  */
@@ -31,6 +37,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   constructor(
     private readonly reflector: Reflector,
     private readonly apiKeys: ApiKeysService,
+    private readonly prisma: PrismaService,
   ) {
     super();
   }
@@ -60,7 +67,23 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       };
       return true;
     }
-    return super.canActivate(context) as Promise<boolean>;
+
+    const authenticated = (await super.canActivate(context)) as boolean;
+    if (!authenticated) return false;
+
+    // Post-JWT check: the bound user must still exist, be ACTIVE, and not be
+    // soft-deleted. This makes suspensions take effect immediately.
+    const user = req.user;
+    if (user?.sub && !user.sub.startsWith('apikey:')) {
+      const dbUser = await this.prisma.client.user.findFirst({
+        where: { id: user.sub, deletedAt: null },
+        select: { status: true },
+      });
+      if (!dbUser || dbUser.status !== UserStatus.ACTIVE) {
+        throw new UnauthorizedException('Account is disabled or not active');
+      }
+    }
+    return true;
   }
 
   override handleRequest<TUser = any>(err: unknown, user: unknown): TUser {

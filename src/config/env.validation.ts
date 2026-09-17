@@ -26,6 +26,8 @@ export const envValidationSchema = Joi.object({
   JWT_ACCESS_TTL: Joi.string().default('15m'),
   JWT_REFRESH_TTL: Joi.string().default('30d'),
   EMAIL_VERIFICATION_REQUIRED: Joi.boolean().default(true),
+  AUTH_LOGIN_LOCKOUT_THRESHOLD: Joi.number().integer().positive().default(10),
+  AUTH_LOGIN_LOCKOUT_MS: Joi.number().integer().positive().default(900000),
 
   // SMTP
   SMTP_HOST: Joi.string().allow('').optional(),
@@ -50,6 +52,7 @@ export const envValidationSchema = Joi.object({
   OUTBOX_WORKER_ENABLED: Joi.boolean().default(true),
   OUTBOX_POLL_INTERVAL_MS: Joi.number().integer().positive().default(5000),
   OUTBOX_BATCH_SIZE: Joi.number().integer().positive().default(10),
+  OUTBOX_STALE_PROCESSING_MS: Joi.number().integer().positive().default(60000),
 
   // Throttler
   THROTTLE_TTL: Joi.number().integer().positive().default(60),

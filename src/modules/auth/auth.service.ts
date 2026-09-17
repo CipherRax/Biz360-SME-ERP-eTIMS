@@ -109,7 +109,7 @@ export class AuthService {
             name: user.name,
           },
         });
-        if (this.config.get('app.nodeEnv') !== 'production') {
+        if (['development', 'test'].includes(this.config.get<string>('app.nodeEnv') ?? '')) {
           devVerificationToken = rawToken;
         }
       }
@@ -151,8 +151,14 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    const now = new Date();
+    if (user.lockedUntil && user.lockedUntil > now) {
+      throw new ForbiddenException('Account temporarily locked. Try again later.');
+    }
+
     const valid = await this.password.verify(user.passwordHash, dto.password);
     if (!valid) {
+      await this.recordFailedLogin(user.id, user.failedLoginAttempts);
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -169,13 +175,35 @@ export class AuthService {
     await this.prisma.client.user.update({
       where: { id: user.id },
       data: {
-        lastLoginAt: new Date(),
+        lastLoginAt: now,
         status: UserStatus.ACTIVE,
-        emailVerifiedAt: user.emailVerifiedAt ?? new Date(),
+        emailVerifiedAt: user.emailVerifiedAt ?? now,
+        failedLoginAttempts: 0,
+        lockedUntil: null,
       },
     });
 
     return this.issueSessionPair(user.id, device);
+  }
+
+  private async recordFailedLogin(
+    userId: string,
+    currentAttempts: number,
+  ): Promise<void> {
+    const attempts = currentAttempts + 1;
+    const threshold = this.config.getOrThrow<number>('auth.loginLockoutThreshold');
+    if (attempts >= threshold) {
+      const lockMs = this.config.getOrThrow<number>('auth.loginLockoutMs');
+      await this.prisma.client.user.update({
+        where: { id: userId },
+        data: { failedLoginAttempts: 0, lockedUntil: new Date(Date.now() + lockMs) },
+      });
+    } else {
+      await this.prisma.client.user.update({
+        where: { id: userId },
+        data: { failedLoginAttempts: attempts },
+      });
+    }
   }
 
   async refresh(rawToken: string, device: DeviceContext) {

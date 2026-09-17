@@ -61,6 +61,7 @@ export class OutboxWorker {
   async runOnce(): Promise<number> {
     if (this.stopped) return 0;
     try {
+      await this.reapStaleProcessing();
       const rows = await this.claimDueEvents();
       for (const row of rows) {
         await this.processRow(row);
@@ -70,6 +71,49 @@ export class OutboxWorker {
       this.logger.error(`Outbox poll failed: ${(error as Error).message}`);
       return 0;
     }
+  }
+
+  /**
+   * Reclaims rows stuck in PROCESSING. A row can be left in PROCESSING if the
+   * worker that claimed it is killed or crashes mid-dispatch; without a reaper
+   * such rows would never be retried. Rows whose `updatedAt` (set when they
+   * were claimed) is older than the stale threshold and whose attempts remain
+   * below maxAttempts are reset to PENDING so the next poll reclaims them;
+   * exhausted rows are moved to FAILED.
+   */
+  private async reapStaleProcessing(): Promise<void> {
+    const staleBefore = new Date(
+      Date.now() - this.config.getOrThrow<number>('outbox.staleProcessingMs'),
+    );
+    const stale = (await this.prisma.client.outboxEvent.findMany({
+      where: { status: 'PROCESSING', updatedAt: { lt: staleBefore } },
+      select: { id: true, attempts: true, maxAttempts: true },
+      take: this.config.getOrThrow<number>('outbox.batchSize'),
+    })) as unknown as { id: string; attempts: number; maxAttempts: number }[];
+
+    if (stale.length === 0) return;
+
+    const failed = stale.filter((row) => row.attempts >= row.maxAttempts);
+    const reclaim = stale.filter((row) => row.attempts < row.maxAttempts);
+
+    if (reclaim.length > 0) {
+      await this.prisma.client.outboxEvent.updateMany({
+        where: { id: { in: reclaim.map((row) => row.id) }, status: 'PROCESSING' },
+        data: { status: 'PENDING', nextAttemptAt: new Date() },
+      });
+    }
+    if (failed.length > 0) {
+      await this.prisma.client.outboxEvent.updateMany({
+        where: { id: { in: failed.map((row) => row.id) }, status: 'PROCESSING' },
+        data: {
+          status: 'FAILED',
+          lastError: 'Stale PROCESSING row reclaimed after exceeding maxAttempts',
+        },
+      });
+    }
+    this.logger.warn(
+      `Stale reaper: reclaimed ${reclaim.length}, failed ${failed.length} PROCESSING row(s)`,
+    );
   }
 
   private async claimDueEvents(): Promise<EventRow[]> {

@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { Logger } from 'nestjs-pino';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
@@ -9,22 +10,62 @@ import { correlationIdMiddleware } from './common/middleware/correlation-id.midd
 import { enrichOpenApiWithExamples } from './common/swagger/examples.js';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bufferLogs: true,
+  });
 
   app.useLogger(app.get(Logger));
   app.use(correlationIdMiddleware);
-  app.use(helmet());
 
   const config = app.get(ConfigService);
-  const prefix = config.getOrThrow<string>('app.apiPrefix');
+  const nodeEnv = config.getOrThrow<string>('app.nodeEnv');
+  const isProduction = nodeEnv === 'production';
 
-  app.setGlobalPrefix(prefix);
+  // --- Security headers ---
+  app.use(
+    helmet({
+      contentSecurityPolicy: isProduction
+        ? { directives: { defaultSrc: ["'self'"] } }
+        : false,
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
+
+  // --- CORS: fail closed when no origins configured in production ---
+  const corsOrigins = config.getOrThrow<string[]>('app.corsOrigins');
+  if (isProduction && corsOrigins.length === 0) {
+    app.get(Logger).fatal(
+      'CORS_ORIGINS is empty in production — refusing to start with wildcard CORS. ' +
+        'Set CORS_ORIGINS to a comma-separated list of trusted frontend origins.',
+    );
+    process.exit(1);
+  }
   app.enableCors({
-    origin: config.getOrThrow<string[]>('app.corsOrigins').length
-      ? config.getOrThrow<string[]>('app.corsOrigins')
-      : '*',
-    credentials: true,
+    origin: corsOrigins.length > 0 ? corsOrigins : isProduction ? [] : '*',
+    credentials: corsOrigins.length > 0,
   });
+
+  // --- Body size limits ---
+  app.useBodyParser('json', { limit: '1mb' });
+
+  const prefix = config.getOrThrow<string>('app.apiPrefix');
+  app.setGlobalPrefix(prefix);
+
+  // --- Swagger: gated behind NODE_ENV (never exposed in production) ---
+  if (!isProduction) {
+    const swagger = new DocumentBuilder()
+      .setTitle('SME ERP + eTIMS API')
+      .setDescription(
+        'Multi-tenant SME ERP with Kenya Revenue Authority eTIMS integration',
+      )
+      .setVersion('0.1.0')
+      .addBearerAuth()
+      .build();
+    const document = enrichOpenApiWithExamples(SwaggerModule.createDocument(app, swagger));
+    SwaggerModule.setup(`${prefix}/docs`, app, document, {
+      swaggerOptions: { persistAuthorization: true },
+    });
+  }
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -35,18 +76,8 @@ async function bootstrap() {
     }),
   );
 
-  const swagger = new DocumentBuilder()
-    .setTitle('SME ERP + eTIMS API')
-    .setDescription(
-      'Multi-tenant SME ERP with Kenya Revenue Authority eTIMS integration',
-    )
-    .setVersion('0.1.0')
-    .addBearerAuth()
-    .build();
-  const document = enrichOpenApiWithExamples(SwaggerModule.createDocument(app, swagger));
-  SwaggerModule.setup(`${prefix}/docs`, app, document, {
-    swaggerOptions: { persistAuthorization: true },
-  });
+  // --- Graceful shutdown: ensure in-flight requests / outbox jobs complete ---
+  app.enableShutdownHooks();
 
   const port = config.getOrThrow<number>('app.port');
   await app.listen(port);

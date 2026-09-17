@@ -26,6 +26,8 @@ describe('SME ERP API (e2e)', () => {
 
   beforeAll(async () => {
     process.env.LOG_LEVEL = 'silent';
+    process.env.AUTH_LOGIN_LOCKOUT_THRESHOLD = '3';
+    process.env.AUTH_LOGIN_LOCKOUT_MS = '60000';
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
@@ -163,6 +165,24 @@ describe('SME ERP API (e2e)', () => {
       .send({ email: emailFor('nobody'), password: 'WrongPassword1' })
       .expect(401);
     expect(res.body.success).toBe(false);
+  });
+
+  it('locks the account after repeated failed logins', async () => {
+    const user = await register(emailFor('lockout'));
+
+    for (let i = 0; i < 3; i++) {
+      await http()
+        .post('/api/v1/auth/login')
+        .send({ email: user.email, password: 'WrongPassword1' })
+        .expect(401);
+    }
+
+    // Even the correct password is refused while the lock is active.
+    const locked = await http()
+      .post('/api/v1/auth/login')
+      .send({ email: user.email, password: PASSWORD })
+      .expect(403);
+    expect(locked.body.message).toBe('Account temporarily locked. Try again later.');
   });
 
   it('rejects weak passwords on register', async () => {

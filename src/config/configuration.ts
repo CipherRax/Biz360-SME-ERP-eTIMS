@@ -29,6 +29,14 @@ export const authConfig = registerAs('auth', () => ({
   refreshTtl: process.env.JWT_REFRESH_TTL ?? '30d',
   emailVerificationRequired:
     (process.env.EMAIL_VERIFICATION_REQUIRED ?? 'true') === 'true',
+  loginLockoutThreshold: parseInt(
+    process.env.AUTH_LOGIN_LOCKOUT_THRESHOLD ?? '10',
+    10,
+  ),
+  loginLockoutMs: parseInt(
+    process.env.AUTH_LOGIN_LOCKOUT_MS ?? (15 * 60 * 1000).toString(),
+    10,
+  ),
 }));
 
 export const redisConfig = registerAs('redis', () => ({
@@ -44,6 +52,7 @@ export const outboxConfig = registerAs('outbox', () => ({
   enabled: (process.env.OUTBOX_WORKER_ENABLED ?? 'true') === 'true',
   pollIntervalMs: parseInt(process.env.OUTBOX_POLL_INTERVAL_MS ?? '5000', 10),
   batchSize: parseInt(process.env.OUTBOX_BATCH_SIZE ?? '10', 10),
+  staleProcessingMs: parseInt(process.env.OUTBOX_STALE_PROCESSING_MS ?? '60000', 10),
 }));
 
 export const etimsConfig = registerAs('etims', () => ({

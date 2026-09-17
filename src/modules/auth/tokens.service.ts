@@ -56,6 +56,8 @@ export class TokensService {
         secret: this.accessSecret,
         expiresIn,
         subject: claims.sub,
+        issuer: 'biz360-erp',
+        audience: 'biz360-erp-api',
       },
     );
   }

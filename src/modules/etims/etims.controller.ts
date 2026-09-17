@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
-import { Role } from '../../generated/prisma/client.js';
+import { Prisma, Role } from '../../generated/prisma/client.js';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import type { AuthenticatedUser } from '../../common/decorators/current-user.decorator.js';
 import { Roles } from '../../common/decorators/roles.decorator.js';
@@ -72,29 +72,45 @@ export class EtimsController {
     @Param('id', new ParseUUIDPipe()) id?: string,
   ) {
     if (!user || !id) throw new BadRequestException('Not authenticated');
-    const invoice = await this.prisma.client.saleInvoice.findFirst({
-      where: { id, organizationId: user.orgId },
-      select: { id: true, invoiceNumber: true, status: true, etimsSubmittedAt: true },
-    });
-    if (!invoice) throw new BadRequestException('Invoice not found');
-    if (invoice.status === 'VOID') {
-      throw new BadRequestException('A voided invoice must be handled as a credit note');
-    }
-
-    const alreadySubmitted = invoice.etimsSubmittedAt !== null;
-    if (!alreadySubmitted) {
-      await this.outbox.enqueue(this.prisma.client, {
-        type: 'ETIMS_INVOICE_SUBMIT',
-        aggregateType: 'SaleInvoice',
-        aggregateId: invoice.id,
-        organizationId: user.orgId,
-        payload: { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber },
+    try {
+      const invoice = await this.prisma.client.$transaction(async (tx) => {
+        const row = await tx.saleInvoice.findFirst({
+          where: { id, organizationId: user.orgId },
+          select: { id: true, invoiceNumber: true, status: true, etimsSubmittedAt: true },
+        });
+        if (!row) throw new BadRequestException('Invoice not found');
+        if (row.status === 'VOID') {
+          throw new BadRequestException('A voided invoice must be handled as a credit note');
+        }
+        if (row.etimsSubmittedAt === null) {
+          await this.outbox.enqueue(tx, {
+            type: 'ETIMS_INVOICE_SUBMIT',
+            aggregateType: 'SaleInvoice',
+            aggregateId: row.id,
+            organizationId: user.orgId,
+            payload: { invoiceId: row.id, invoiceNumber: row.invoiceNumber },
+          });
+        }
+        return row;
       });
+
+      const alreadySubmitted = invoice.etimsSubmittedAt !== null;
+      return {
+        enqueued: !alreadySubmitted,
+        invoiceNumber: invoice.invoiceNumber,
+        alreadySubmitted,
+      };
+    } catch (error) {
+      // A concurrent trigger already enqueued an in-flight submission for this
+      // invoice (outbox_events_inflight_aggregate_unique). Treat it as queued
+      // rather than failing the request or double-submitting to KRA.
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        return { enqueued: false, invoiceNumber: undefined, alreadySubmitted: false, alreadyQueued: true };
+      }
+      throw error;
     }
-    return {
-      enqueued: !alreadySubmitted,
-      invoiceNumber: invoice.invoiceNumber,
-      alreadySubmitted,
-    };
   }
 }
