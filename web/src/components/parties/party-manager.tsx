@@ -275,9 +275,16 @@ export function PartyManager({
           <Field label="KRA PIN" htmlFor="taxId" error={errors.taxId?.message}>
             <Input id="taxId" invalid={Boolean(errors.taxId)} {...register('taxId')} />
           </Field>
-          <Field label="Credit limit (KES)" htmlFor="creditLimit" error={errors.creditLimit?.message}>
-            <Input id="creditLimit" inputMode="decimal" placeholder="0.00" invalid={Boolean(errors.creditLimit)} {...register('creditLimit')} />
-          </Field>
+          {kind === 'CUSTOMER' ? (
+            <Field
+              label="Credit limit (KES)"
+              htmlFor="creditLimit"
+              error={errors.creditLimit?.message}
+              hint="Maximum unpaid balance allowed. Leave blank for no limit; 0 blocks all credit sales."
+            >
+              <Input id="creditLimit" inputMode="decimal" placeholder="0.00" invalid={Boolean(errors.creditLimit)} {...register('creditLimit')} />
+            </Field>
+          ) : null}
           <Field label="Address" htmlFor="addressLine1" error={errors.addressLine1?.message} className="sm:col-span-2">
             <Input id="addressLine1" invalid={Boolean(errors.addressLine1)} {...register('addressLine1')} />
           </Field>

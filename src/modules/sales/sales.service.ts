@@ -297,7 +297,7 @@ export class SalesService {
       // Load party for payment terms + credit limit.
       const party = await tx.party.findFirst({
         where: { id: invoice.partyId },
-        select: { paymentTermsDays: true, creditLimit: true },
+        select: { name: true, paymentTermsDays: true, creditLimit: true },
       });
       const orgSetting = await tx.organizationSetting.findFirst({
         where: { organizationId },
@@ -321,8 +321,17 @@ export class SalesService {
         const afterConfirming = round2(outstanding + Number(invoice.total));
         const limit = Number(party.creditLimit);
         if (afterConfirming > limit) {
+          const money = (value: number) =>
+            `${invoice.currency} ${value.toLocaleString('en-KE', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}`;
           throw new ConflictException(
-            `Party credit limit ${limit} would be exceeded (outstanding after confirmation: ${afterConfirming})`,
+            `Credit limit reached for ${party.name}. Their outstanding balance is ${money(
+              round2(outstanding),
+            )} and confirming this ${money(Number(invoice.total))} invoice would take it to ${money(
+              afterConfirming,
+            )}, above their ${money(limit)} limit. Record a payment, reduce this invoice, or raise the limit in the customer's profile.`,
           );
         }
       }

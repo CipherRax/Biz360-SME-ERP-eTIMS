@@ -78,12 +78,21 @@ export function InvoiceDetail({ id }: { id: string }) {
       toast({ tone: 'success', title: 'Invoice confirmed' });
       invalidate();
     },
-    onError: (error) =>
+    onError: (error) => {
+      const message = error instanceof ApiError ? error.message : 'Please try again.';
+      const creditLimit = message.toLowerCase().includes('credit limit');
+      const stock = message.toLowerCase().includes('insufficient stock');
       toast({
         tone: 'error',
-        title: 'Could not confirm invoice',
-        description: error instanceof ApiError ? error.message : 'Please try again.',
-      }),
+        title: creditLimit
+          ? 'Credit limit reached'
+          : stock
+            ? 'Not enough stock'
+            : 'Could not confirm invoice',
+        description: message,
+        durationMs: creditLimit || stock ? 12000 : undefined,
+      });
+    },
   });
 
   const recordPayment = useMutation({
