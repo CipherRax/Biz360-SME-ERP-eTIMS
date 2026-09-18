@@ -7,9 +7,9 @@ import { Bell, ChevronDown, LogOut, Menu, ShieldCheck } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils/cn';
 import { ROLE_LABEL } from '@/lib/utils/status';
-import { initials } from '@/lib/utils/format';
 import { useAuth } from '@/lib/auth/auth-context';
 import { notificationsApi } from '@/lib/api';
+import { UserAvatar } from '@/components/user-avatar';
 import { NAV_ITEMS } from './nav';
 
 export function TopNav({ onOpenMenu }: { onOpenMenu?: () => void }) {
@@ -91,9 +91,7 @@ export function TopNav({ onOpenMenu }: { onOpenMenu?: () => void }) {
               aria-haspopup="menu"
               aria-expanded={menuOpen}
             >
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-brand-soft text-xs font-bold text-brand-deep">
-                {user ? initials(user.email.split('@')[0]) : '—'}
-              </span>
+              <UserAvatar name={user?.email.split('@')[0] ?? '—'} email={user?.email} size={32} />
               <span className="hidden text-left sm:block">
                 <span className="block max-w-[140px] truncate text-sm font-semibold text-ink-900">
                   {user?.email}

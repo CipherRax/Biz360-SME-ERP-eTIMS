@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Power } from 'lucide-react';
+import { BadgeCheck, Plus, Pencil, Power, ShieldQuestion } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -29,13 +29,15 @@ import { newIdempotencyKey } from '@/lib/utils/idempotency';
 import type { Party, PartyType } from '@/types/domain';
 import type { ColumnDef } from '@tanstack/react-table';
 
+const KRA_PIN_PATTERN = /^[A-Za-z][0-9]{9}[A-Za-z]$/;
+
 const schema = z.object({
   name: z.string().min(2, 'Name is required').max(160, 'Name is too long'),
   email: z.string().email('Enter a valid email').max(120).optional().or(z.literal('')),
   phone: z.string().max(30).optional().or(z.literal('')),
   taxId: z
     .string()
-    .regex(/^[A-Za-z0-9]{10,11}$/, 'KRA PIN should be 10–11 letters or digits')
+    .regex(KRA_PIN_PATTERN, 'KRA PIN must be a letter + 9 digits + letter, e.g. A012345678Z')
     .optional()
     .or(z.literal('')),
   addressLine1: z.string().max(160).optional().or(z.literal('')),
@@ -159,6 +161,20 @@ export function PartyManager({
       }),
   });
 
+  const verifyPin = useMutation({
+    mutationFn: (party: Party) => partiesApi.verifyKraPin(party.id, newIdempotencyKey()),
+    onSuccess: () => {
+      toast({ tone: 'success', title: 'KRA PIN verified' });
+      void queryClient.invalidateQueries({ queryKey: ['parties'] });
+    },
+    onError: (error) =>
+      toast({
+        tone: 'error',
+        title: 'KRA PIN check failed',
+        description: error instanceof ApiError ? error.message : 'Please try again.',
+      }),
+  });
+
   const columns = useMemo<ColumnDef<Party, unknown>[]>(
     () => [
       {
@@ -168,7 +184,28 @@ export function PartyManager({
       },
       { accessorKey: 'email', header: 'Email', cell: ({ row }) => row.original.email ?? '—' },
       { accessorKey: 'phone', header: 'Phone', cell: ({ row }) => row.original.phone ?? '—' },
-      { accessorKey: 'taxId', header: 'PIN', cell: ({ row }) => row.original.taxId ?? '—' },
+      {
+        accessorKey: 'taxId',
+        header: 'PIN',
+        cell: ({ row }) => {
+          const party = row.original;
+          if (!party.taxId) return '—';
+          return (
+            <span className="flex items-center gap-2">
+              <span className="font-mono text-xs">{party.taxId}</span>
+              {party.kraPinVerifiedAt ? (
+                <Badge tone="success">
+                  <BadgeCheck className="h-3 w-3" /> Verified
+                </Badge>
+              ) : party.type !== 'CUSTOMER' ? (
+                <Badge tone="warning">
+                  <ShieldQuestion className="h-3 w-3" /> Unverified
+                </Badge>
+              ) : null}
+            </span>
+          );
+        },
+      },
       {
         accessorKey: 'creditLimit',
         header: 'Credit limit',
@@ -188,6 +225,18 @@ export function PartyManager({
         header: '',
         cell: ({ row }) => (
           <div className="flex justify-end gap-1">
+            {row.original.taxId && row.original.type !== 'CUSTOMER' ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                loading={verifyPin.isPending && verifyPin.variables?.id === row.original.id}
+                disabled={verifyPin.isPending}
+                onClick={() => verifyPin.mutate(row.original)}
+                aria-label="Verify KRA PIN"
+              >
+                <BadgeCheck className="h-4 w-4" /> Verify PIN
+              </Button>
+            ) : null}
             <Button variant="ghost" size="icon" aria-label="Edit" onClick={() => openEdit(row.original)}>
               <Pencil className="h-4 w-4" />
             </Button>

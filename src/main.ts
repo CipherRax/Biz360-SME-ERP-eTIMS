@@ -3,6 +3,8 @@ import { Logger } from 'nestjs-pino';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { existsSync, mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import helmet from 'helmet';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module.js';
@@ -47,6 +49,11 @@ async function bootstrap() {
 
   // --- Body size limits ---
   app.useBodyParser('json', { limit: '1mb' });
+
+  // --- Uploaded assets (e.g. user avatars) ---
+  const uploadsRoot = resolve(process.cwd(), 'uploads');
+  if (!existsSync(uploadsRoot)) mkdirSync(uploadsRoot, { recursive: true });
+  app.useStaticAssets(uploadsRoot, { prefix: '/uploads/', index: false, maxAge: '7d' });
 
   const prefix = config.getOrThrow<string>('app.apiPrefix');
   app.setGlobalPrefix(prefix);

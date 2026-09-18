@@ -37,6 +37,8 @@ export const usersApi = {
     api.post<UserRecord>('/users', input, { idempotencyKey }),
   updateMe: (input: { name?: string; preferences?: Record<string, unknown> }) =>
     api.patch<UserRecord>('/users/me', input),
+  uploadAvatar: (dataUrl: string) => api.post<UserRecord>('/users/me/avatar', { data: dataUrl }),
+  removeAvatar: () => api.post<UserRecord>('/users/me/avatar', { data: '' }),
   update: (id: string, input: UpdateUserInput) => api.patch<UserRecord>(`/users/${id}`, input),
   remove: (id: string) => api.delete<void>(`/users/${id}`),
 };

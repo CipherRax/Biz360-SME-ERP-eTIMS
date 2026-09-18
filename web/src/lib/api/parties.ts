@@ -15,6 +15,10 @@ export const partiesApi = {
     api.post<Party>('/parties', input, { idempotencyKey }),
   update: (id: string, input: Partial<PartyInput>) => api.patch<Party>(`/parties/${id}`, input),
   remove: (id: string) => api.delete<void>(`/parties/${id}`),
+  verifyKraPin: (id: string, idempotencyKey?: string) =>
+    api.post<{ verified: boolean; party: Party }>(`/parties/${id}/kra-pin/verify`, undefined, {
+      idempotencyKey,
+    }),
 };
 
 export type { PartyInput };

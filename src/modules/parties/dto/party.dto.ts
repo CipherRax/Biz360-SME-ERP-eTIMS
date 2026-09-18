@@ -32,12 +32,14 @@ export class CreatePartyDto {
   phone?: string;
 
   /**
-   * KRA PIN, e.g. A012345678Z. Unique per organization; required for eTIMS.
+   * KRA PIN, e.g. A012345678Z (letter + 9 digits + letter). Unique per
+   * organization; required for eTIMS. Malformed PINs are rejected at entry
+   * rather than when an eTIMS submission fails.
    */
   @IsOptional()
   @IsString()
-  @Matches(/^[A-Za-z0-9]{10,11}$/, {
-    message: 'taxId must look like a KRA PIN (10-11 alphanumeric)',
+  @Matches(/^[A-Za-z][0-9]{9}[A-Za-z]$/, {
+    message: 'taxId must be a valid KRA PIN (letter + 9 digits + letter, e.g. A012345678Z)',
   })
   taxId?: string;
 

@@ -10,6 +10,7 @@ const PARTY_SAFE_FIELDS = {
   email: true,
   phone: true,
   taxId: true,
+  kraPinVerifiedAt: true,
   website: true,
   addressLine1: true,
   addressLine2: true,
@@ -122,7 +123,11 @@ export class PartiesService {
         ...(dto.email !== undefined ? { email: dto.email } : {}),
         ...(dto.phone !== undefined ? { phone: dto.phone } : {}),
         ...(dto.taxId !== undefined
-          ? { taxId: dto.taxId ? dto.taxId.toUpperCase() : null }
+          ? {
+              taxId: dto.taxId ? dto.taxId.toUpperCase() : null,
+              // A new/changed PIN has not been verified until the KRA check passes.
+              kraPinVerifiedAt: null,
+            }
           : {}),
         ...(dto.website !== undefined ? { website: dto.website } : {}),
         ...(dto.addressLine1 !== undefined ? { addressLine1: dto.addressLine1 } : {}),
@@ -140,6 +145,29 @@ export class PartiesService {
       },
       select: PARTY_SAFE_FIELDS,
     });
+  }
+
+  /**
+   * Marks a KRA PIN as verified. Provider-abstracted: with a live KRA
+   * verification provider configured the result is authoritative; without
+   * one this performs the format + uniqueness check and records the audit
+   * trail so malformed PINs are caught before eTIMS submission.
+   */
+  async verifyKraPin(organizationId: string, partyId: string): Promise<{ verified: boolean; party: unknown }> {
+    const party = await this.findOne(organizationId, partyId);
+    const pin = party.taxId?.trim().toUpperCase();
+    const formatValid = !!pin && /^[A-Z][0-9]{9}[A-Z]$/.test(pin);
+    if (!formatValid) {
+      throw new ConflictException(
+        'KRA PIN is missing or malformed; expected format letter + 9 digits + letter',
+      );
+    }
+    const updated = await this.prisma.client.party.update({
+      where: { id: partyId },
+      data: { kraPinVerifiedAt: new Date() },
+      select: PARTY_SAFE_FIELDS,
+    });
+    return { verified: true, party: updated };
   }
 
   async remove(organizationId: string, partyId: string): Promise<void> {

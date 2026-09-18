@@ -1,0 +1,107 @@
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseEnumPipe,
+  ParseIntPipe,
+  ParseUUIDPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { SupplierEtimsMatchStatus } from '../../../generated/prisma/client.js';
+import { CurrentUser } from '../../../common/decorators/current-user.decorator.js';
+import type { AuthenticatedUser } from '../../../common/decorators/current-user.decorator.js';
+import { Audit } from '../../../common/decorators/audit.decorator.js';
+import { SupplierEtimsService } from './supplier-etims.service.js';
+import {
+  CreateSupplierEtimsInvoiceDto,
+  MatchSupplierEtimsDto,
+  ScanSupplierEtimsDto,
+} from './dto/supplier-etims.dto.js';
+
+@ApiTags('compliance')
+@ApiBearerAuth()
+@Controller('etims/supplier-invoices')
+export class SupplierEtimsController {
+  constructor(private readonly service: SupplierEtimsService) {}
+
+  private require(user: AuthenticatedUser | undefined): asserts user is AuthenticatedUser {
+    if (!user) throw new BadRequestException('Not authenticated');
+  }
+
+  @Post()
+  @Audit('SupplierEtimsInvoice')
+  create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateSupplierEtimsInvoiceDto) {
+    this.require(user);
+    return this.service.create(user.orgId, dto);
+  }
+
+  @Get()
+  list(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('limit', new ParseIntPipe({ optional: true })) limit = 50,
+    @Query('cursor') cursor?: string,
+    @Query('supplierId', new ParseUUIDPipe({ optional: true })) supplierId?: string,
+    @Query('matchStatus', new ParseEnumPipe(SupplierEtimsMatchStatus, { optional: true }))
+    matchStatus?: SupplierEtimsMatchStatus,
+  ) {
+    this.require(user);
+    return this.service.list(user.orgId, { limit, cursor, supplierId, matchStatus });
+  }
+
+  @Post('scan')
+  scan(@CurrentUser() user: AuthenticatedUser, @Body() dto: ScanSupplierEtimsDto) {
+    this.require(user);
+    return this.service.scan(user.orgId, dto);
+  }
+
+  @Get('scan/:jobId')
+  scanStatus(@CurrentUser() user: AuthenticatedUser, @Param('jobId') jobId: string) {
+    this.require(user);
+    return this.service.scanStatus(user.orgId, jobId);
+  }
+
+  @Post(':id/verify')
+  @Audit('SupplierEtimsInvoice')
+  verify(@CurrentUser() user: AuthenticatedUser, @Param('id', new ParseUUIDPipe()) id: string) {
+    this.require(user);
+    return this.service.verify(user.orgId, id);
+  }
+
+  @Post(':id/match')
+  @Audit('SupplierEtimsInvoice')
+  match(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: MatchSupplierEtimsDto,
+  ) {
+    this.require(user);
+    return this.service.match(user.orgId, id, dto);
+  }
+
+  @Get('unmatched')
+  unmatched(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('limit', new ParseIntPipe({ optional: true })) limit = 50,
+    @Query('cursor') cursor?: string,
+  ) {
+    this.require(user);
+    return this.service.unmatched(user.orgId, limit, cursor);
+  }
+}
+
+@ApiTags('compliance')
+@ApiBearerAuth()
+@Controller('etims/compliance')
+export class ExpenseExposureController {
+  constructor(private readonly service: SupplierEtimsService) {}
+
+  @Get('exposure-summary')
+  exposure(@CurrentUser() user: AuthenticatedUser) {
+    if (!user) throw new BadRequestException('Not authenticated');
+    return this.service.exposureSummary(user.orgId);
+  }
+}

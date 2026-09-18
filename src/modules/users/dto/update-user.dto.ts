@@ -22,6 +22,12 @@ export class UpdateProfileDto {
   preferences?: Record<string, unknown>;
 }
 
+export class UpdateAvatarDto {
+  @IsString()
+  @MaxLength(1_200_000)
+  data: string;
+}
+
 export class AdminUpdateUserDto {
   @IsOptional()
   @IsEnum(Role)

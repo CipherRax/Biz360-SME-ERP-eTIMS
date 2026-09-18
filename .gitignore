@@ -8,3 +8,6 @@ node_modules
 dist
 *.tsbuildinfo
 skills-lock.json
+
+# runtime uploads (avatars, attachment scans, OCR images)
+uploads

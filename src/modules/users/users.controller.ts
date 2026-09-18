@@ -12,7 +12,9 @@ import {
   Patch,
   Post,
   Query,
+  Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Role } from '../../generated/prisma/client.js';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
@@ -20,7 +22,11 @@ import type { AuthenticatedUser } from '../../common/decorators/current-user.dec
 import { Roles } from '../../common/decorators/roles.decorator.js';
 import { Audit } from '../../common/decorators/audit.decorator.js';
 import { UsersService } from './users.service.js';
-import { AdminUpdateUserDto, UpdateProfileDto } from './dto/update-user.dto.js';
+import {
+  AdminUpdateUserDto,
+  UpdateAvatarDto,
+  UpdateProfileDto,
+} from './dto/update-user.dto.js';
 import { CreateMemberDto } from './dto/create-member.dto.js';
 
 @ApiTags('users')
@@ -74,6 +80,23 @@ export class UsersController {
   ) {
     this.require(user);
     return this.users.updateProfile(user.sub, user.orgId, dto);
+  }
+
+  @Post('me/avatar')
+  updateAvatar(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UpdateAvatarDto,
+    @Req() req: Request,
+  ) {
+    this.require(user);
+    const scheme = req.headers['x-forwarded-proto'] ?? req.protocol;
+    const host = req.headers['x-forwarded-host'] ?? req.get('host');
+    return this.users.updateAvatar(
+      user.sub,
+      user.orgId,
+      dto,
+      `${scheme}://${host}`,
+    );
   }
 
   @Patch(':id')

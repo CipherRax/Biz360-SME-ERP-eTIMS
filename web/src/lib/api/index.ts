@@ -5,6 +5,11 @@ export { salesApi } from './sales';
 export { purchasingApi } from './purchasing';
 export { accountingApi } from './accounting';
 export { etimsApi } from './etims';
+export {
+  supplierEtimsApi,
+  expenseExposureApi,
+  withholdingTaxApi,
+} from './compliance';
 export { reportingApi } from './reporting';
 export {
   usersApi,

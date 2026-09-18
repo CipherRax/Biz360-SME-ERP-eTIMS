@@ -23,6 +23,7 @@ import {
   toAmount,
 } from '../../common/helpers/money.js';
 import { LedgerService } from '../accounting/ledger.service.js';
+import { ExpenseComplianceService } from '../compliance/expense-matching/expense-compliance.service.js';
 
 /* -------------------------------------------------------------------------- */
 /*  Safe field projections                                                    */
@@ -138,6 +139,7 @@ export class PurchasingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ledger: LedgerService,
+    private readonly expenseCompliance: ExpenseComplianceService,
   ) {}
 
   private async allocateNumber(
@@ -253,6 +255,14 @@ export class PurchasingService {
           party: { select: { id: true, name: true } },
         },
       });
+
+      await this.expenseCompliance.flagForUnmatchedSupplierInvoice(tx, organizationId, {
+        id: invoice.id,
+        partyId: invoice.partyId,
+        total: invoice.total,
+        invoiceDate: invoice.invoiceDate,
+      });
+
       return { ...invoice, party: invoice.party.name };
     });
   }

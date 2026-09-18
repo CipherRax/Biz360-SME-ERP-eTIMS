@@ -88,3 +88,14 @@ export function etimsMeta(submittedAt: string | null | undefined): StatusMeta {
     ? { label: 'Submitted to KRA', tone: 'success' }
     : { label: 'Not submitted', tone: 'warning' };
 }
+
+export const WHT_PAYMENT_TYPES = [
+  'PROFESSIONAL_FEES',
+  'SERVICE_FEES',
+  'CONTRACTOR_SERVICES',
+  'CONSULTANCY',
+  'ROYALTIES',
+  'RENT',
+  'MANAGEMENT_FEES',
+  'OTHER',
+] as const;

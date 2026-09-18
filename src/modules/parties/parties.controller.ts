@@ -74,6 +74,14 @@ export class PartiesController {
     return this.parties.update(user.orgId, id, dto);
   }
 
+  @Post(':id/kra-pin/verify')
+  @Roles(Role.ADMIN, Role.ACCOUNTANT)
+  @Audit('Party')
+  verifyKraPin(@CurrentUser() user: AuthenticatedUser, @Param('id', new ParseUUIDPipe()) id: string) {
+    this.require(user);
+    return this.parties.verifyKraPin(user.orgId, id);
+  }
+
   @Delete(':id')
   @Roles(Role.ADMIN, Role.MANAGER)
   @Audit('Party')

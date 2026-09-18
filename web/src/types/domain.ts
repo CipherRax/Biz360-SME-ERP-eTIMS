@@ -108,6 +108,7 @@ export interface UserRecord {
   id: string;
   name: string;
   email: string;
+  avatarUrl?: string | null;
   role: Role;
   status: UserStatus;
   preferences?: Record<string, unknown> | null;
@@ -124,6 +125,7 @@ export interface Party {
   email?: string | null;
   phone?: string | null;
   taxId?: string | null;
+  kraPinVerifiedAt?: string | null;
   website?: string | null;
   addressLine1?: string | null;
   addressLine2?: string | null;
@@ -548,4 +550,128 @@ export interface StatementLine {
   reconciled: boolean;
   reconciledAt?: string | null;
   createdAt: string;
+}
+
+// ---- Kenya compliance (addendum Tier 1) -------------------------------------
+export type SupplierEtimsCaptureMethod = 'MANUAL' | 'SCAN' | 'OCR_SCAN' | 'BULK_IMPORT';
+export type SupplierEtimsMatchStatus = 'UNMATCHED' | 'MATCHED' | 'DISPUTED';
+export type SupplierEtimsVerificationStatus =
+  | 'UNVERIFIED'
+  | 'VERIFIED_VIA_KRA_QR'
+  | 'VERIFIED_KRA_LOOKUP'
+  | 'VERIFICATION_FAILED';
+export type WithholdingTaxPaymentType =
+  | 'PROFESSIONAL_FEES'
+  | 'SERVICE_FEES'
+  | 'CONTRACTOR_SERVICES'
+  | 'CONSULTANCY'
+  | 'ROYALTIES'
+  | 'RENT'
+  | 'MANAGEMENT_FEES'
+  | 'OTHER';
+export type WithholdingTaxResidency = 'RESIDENT' | 'NON_RESIDENT';
+export type WithholdingTaxDeductionStatus = 'CALCULATED' | 'WITHHELD' | 'REMITTED';
+
+export interface SupplierEtimsInvoice {
+  id: string;
+  supplierId: string;
+  supplier: { id: string; name: string; taxId?: string | null };
+  kraInvoiceNumber: string;
+  kraControlUnitId?: string | null;
+  invoiceDate: string;
+  amount: number;
+  vatAmount: number;
+  captureMethod: SupplierEtimsCaptureMethod;
+  matchedPurchaseInvoiceId?: string | null;
+  matchedPurchaseInvoice?: { id: string; invoiceNumber: string } | null;
+  matchStatus: SupplierEtimsMatchStatus;
+  verificationStatus: SupplierEtimsVerificationStatus;
+  attachmentUrl?: string | null;
+  createdAt: string;
+}
+
+export interface UnmatchedExpense {
+  purchaseInvoiceId: string;
+  invoiceNumber: string;
+  supplierId: string;
+  supplier: string;
+  amount: number;
+  invoiceDate: string;
+  flaggedAt?: string | null;
+}
+
+export interface EtimsExposureSummary {
+  unmatchedCount: number;
+  totalExposure: number;
+  oldestUnmatchedAt?: string | null;
+  agesInDays: number;
+}
+
+export interface ScanResult {
+  jobId: string;
+  invoiceId?: string | null;
+  status: string;
+  message: string;
+}
+
+export interface ScanJobStatus {
+  jobId: string;
+  jobStatus: string;
+  attempts: number;
+  error?: string | null;
+  processedAt?: string | null;
+  extracted?: SupplierEtimsInvoice | null;
+}
+
+export interface WhtRate {
+  id: string;
+  organizationId?: string | null;
+  paymentType: WithholdingTaxPaymentType;
+  residency: WithholdingTaxResidency;
+  ratePercent: string;
+  effectiveFrom: string;
+  effectiveTo?: string | null;
+  updatedAt: string;
+}
+
+export interface WhtRatesResponse {
+  systemDefaults: WhtRate[];
+  organizationOverrides: WhtRate[];
+}
+
+export interface WhtComputeResult {
+  paymentId: string;
+  grossAmount: string;
+  ratePercent: string;
+  whtAmount: string;
+  netPayableAmount: string;
+  rateSource: 'system' | 'custom';
+}
+
+export interface WithholdingTaxDeduction {
+  id: string;
+  supplierId: string;
+  supplier: { name: string; taxId?: string | null };
+  supplierPaymentId?: string | null;
+  paymentType: WithholdingTaxPaymentType;
+  grossAmount: string;
+  ratePercent: string;
+  whtAmount: string;
+  netPayableAmount: string;
+  status: WithholdingTaxDeductionStatus;
+  kraWhtCertificateNumber?: string | null;
+  remittanceDate?: string | null;
+  createdAt: string;
+}
+
+export interface WhtRemittanceSummary {
+  range: { from: string; to: string };
+  totals: { grossAmount: string; whtAmount: string; count: number };
+  byPaymentType: Array<{
+    paymentType: WithholdingTaxPaymentType;
+    grossAmount: string;
+    whtAmount: string;
+    count: number;
+  }>;
+  pendingRemittance: WithholdingTaxDeduction[];
 }

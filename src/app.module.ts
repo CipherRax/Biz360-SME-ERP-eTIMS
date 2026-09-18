@@ -32,6 +32,7 @@ import { EtimsModule } from './modules/etims/etims.module.js';
 import { ReportingModule } from './modules/reporting/reporting.module.js';
 import { AccountingModule } from './modules/accounting/accounting.module.js';
 import { BankingModule } from './modules/banking/banking.module.js';
+import { ComplianceModule } from './modules/compliance/compliance.module.js';
 import { HealthModule } from './health/health.module.js';
 import { EventsModule } from './events/events.module.js';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
@@ -97,6 +98,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
     ReportingModule,
     AccountingModule,
     BankingModule,
+    ComplianceModule,
     HealthModule,
     CommonModule,
   ],

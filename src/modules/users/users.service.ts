@@ -1,4 +1,12 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { basename, join, resolve } from 'node:path';
 import {
   Prisma,
   Role,
@@ -6,13 +14,18 @@ import {
 } from '../../generated/prisma/client.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { PasswordService } from '../auth/password.service.js';
-import { AdminUpdateUserDto, UpdateProfileDto } from './dto/update-user.dto.js';
+import {
+  AdminUpdateUserDto,
+  UpdateAvatarDto,
+  UpdateProfileDto,
+} from './dto/update-user.dto.js';
 import { CreateMemberDto } from './dto/create-member.dto.js';
 
 const SAFE_USER_FIELDS = {
   id: true,
   name: true,
   email: true,
+  avatarUrl: true,
   role: true,
   status: true,
   preferences: true,
@@ -20,6 +33,16 @@ const SAFE_USER_FIELDS = {
   lastLoginAt: true,
   createdAt: true,
 } as const;
+
+const AVATAR_MIME_TO_EXT: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'image/avif': 'avif',
+};
+
+const MAX_AVATAR_BYTES = 512 * 1024;
 
 @Injectable()
 export class UsersService {
@@ -98,6 +121,87 @@ export class UsersService {
       },
       select: SAFE_USER_FIELDS,
     });
+  }
+
+  /**
+   * Accepts a base64 data URL (or blank to remove) and persists the image to
+   * the local uploads dir served at /uploads/avatars. Only raster formats are
+   * allowed — SVG is rejected to avoid stored-XSS via the <img> element.
+   */
+  async updateAvatar(
+    actorId: string,
+    organizationId: string,
+    dto: UpdateAvatarDto,
+    baseUrl: string,
+  ) {
+    const user = await this.prisma.client.user.findFirst({
+      where: { id: actorId, organizationId },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    const data = (dto.data ?? '').trim();
+    if (data === '') {
+      UsersService.removeAvatarFile(user.avatarUrl);
+      return this.prisma.client.user.update({
+        where: { id: actorId },
+        data: { avatarUrl: null },
+        select: SAFE_USER_FIELDS,
+      });
+    }
+
+    const match = /^data:(image\/[a-z+]+);base64,(.+)$/i.exec(data);
+    if (!match) {
+      throw new BadRequestException(
+        'Avatar must be a base64 data URL (image/png, image/jpeg, image/webp, image/gif or image/avif).',
+      );
+    }
+    const [, mime, encoded] = match;
+    const ext = AVATAR_MIME_TO_EXT[mime.toLowerCase()];
+    if (!ext) {
+      throw new BadRequestException(
+        'Unsupported image type; use PNG, JPEG, WebP, GIF or AVIF.',
+      );
+    }
+
+    const bytes = Buffer.from(encoded, 'base64');
+    if (bytes.byteLength === 0) {
+      throw new BadRequestException('Avatar image is empty.');
+    }
+    if (bytes.byteLength > MAX_AVATAR_BYTES) {
+      throw new BadRequestException('Avatar image must be 512 KB or smaller.');
+    }
+
+    const dir = UsersService.avatarsDir();
+    mkdirSync(dir, { recursive: true });
+    const filename = `avatar-${randomUUID()}.${ext}`;
+    writeFileSync(join(dir, filename), bytes);
+
+    UsersService.removeAvatarFile(user.avatarUrl);
+    const avatarUrl = `${baseUrl}/uploads/avatars/${filename}`;
+    return this.prisma.client.user.update({
+      where: { id: actorId },
+      data: { avatarUrl },
+      select: SAFE_USER_FIELDS,
+    });
+  }
+
+  private static avatarsDir() {
+    return resolve(process.cwd(), 'uploads', 'avatars');
+  }
+
+  private static removeAvatarFile(avatarUrl: string | null | undefined) {
+    if (!avatarUrl) return;
+    try {
+      const url = new URL(avatarUrl);
+      if (!url.pathname.startsWith('/uploads/avatars/')) return;
+      const name = basename(url.pathname);
+      const file = resolve(UsersService.avatarsDir(), name);
+      if (name.startsWith('avatar-') && file.startsWith(UsersService.avatarsDir()) && existsSync(file)) {
+        unlinkSync(file);
+      }
+    } catch {
+      // Not a valid URL — leave the file alone.
+    }
   }
 
   /**

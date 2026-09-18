@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import { useRef, type ChangeEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { KeyRound, Laptop, Save, ShieldCheck, UserCircle } from 'lucide-react';
+import { Camera, KeyRound, Laptop, Save, ShieldCheck, Trash2, UserCircle } from 'lucide-react';
 import {
   Badge,
   Button,
@@ -29,11 +30,48 @@ import {
   TableWrapper,
   useToast,
 } from '@/components/ui';
+import { UserAvatar } from '@/components/user-avatar';
 import { sessionsApi, usersApi } from '@/lib/api';
 import { ApiError } from '@/lib/api/http';
 import { useAuth } from '@/lib/auth/auth-context';
-import { formatDate, formatDateTime, initials } from '@/lib/utils/format';
+import { formatDate, formatDateTime } from '@/lib/utils/format';
 import { ROLE_LABEL, USER_STATUS } from '@/lib/utils/status';
+import type { UserRecord } from '@/types/domain';
+
+const AVATAR_ACCEPT = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/avif'];
+const MAX_AVATAR_PIXELS = 256;
+
+function fileToAvatarDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read the selected file.'));
+    reader.onload = () => {
+      const image = new Image();
+      image.onerror = () => reject(new Error('The selected file is not a valid image.'));
+      image.onload = () => {
+        let { width, height } = image;
+        const longest = Math.max(width, height);
+        if (longest > MAX_AVATAR_PIXELS) {
+          const scale = MAX_AVATAR_PIXELS / longest;
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Could not prepare the image for upload.'));
+          return;
+        }
+        ctx.drawImage(image, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      image.src = String(reader.result);
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 const LANGUAGE_LABEL: Record<string, string> = {
   en: 'English',
@@ -116,6 +154,54 @@ export default function ProfilePage() {
     onError,
   });
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const publishAvatar = (updated: UserRecord) => {
+    queryClient.setQueryData(['users', 'me'], updated);
+    void queryClient.invalidateQueries({ queryKey: ['users', 'me'] });
+  };
+
+  const uploadAvatar = useMutation({
+    mutationFn: (dataUrl: string) => usersApi.uploadAvatar(dataUrl),
+    onSuccess: (updated) => {
+      toast({ tone: 'success', title: 'Profile photo updated' });
+      publishAvatar(updated);
+    },
+    onError,
+  });
+
+  const removeAvatar = useMutation({
+    mutationFn: () => usersApi.removeAvatar(),
+    onSuccess: (updated) => {
+      toast({ tone: 'success', title: 'Profile photo removed' });
+      publishAvatar(updated);
+    },
+    onError,
+  });
+
+  const handleAvatarChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!AVATAR_ACCEPT.includes(file.type)) {
+      toast({
+        tone: 'error',
+        title: 'Unsupported image type',
+        description: 'Use PNG, JPEG, WebP, GIF or AVIF.',
+      });
+      return;
+    }
+    void fileToAvatarDataUrl(file)
+      .then((dataUrl) => uploadAvatar.mutate(dataUrl))
+      .catch((error: unknown) =>
+        toast({
+          tone: 'error',
+          title: 'Could not read image',
+          description: error instanceof Error ? error.message : 'Please try again.',
+        }),
+      );
+  };
+
   const revokeSession = useMutation({
     mutationFn: (id: string) => sessionsApi.revoke(id),
     onSuccess: () => {
@@ -152,9 +238,32 @@ export default function ProfilePage() {
         description="Your personal details, preferences and active sign-in sessions."
       />
 
-      <div className="flex items-center gap-4 rounded-xl border border-ink-100 bg-white p-5">
-        <span className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-brand-soft text-lg font-bold text-brand-deep">
-          {me.data ? initials(me.data.name) : <UserCircle className="h-6 w-6" />}
+      <div className="flex items-start gap-4 rounded-xl border border-ink-100 bg-white p-5 sm:items-center">
+        <span className="group relative inline-flex">
+          {me.data ? (
+            <UserAvatar name={me.data.name} email={me.data.email} src={me.data.avatarUrl} size={64} />
+          ) : (
+            <span className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-brand-soft text-ink-400">
+              <UserCircle className="h-8 w-8" />
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploadAvatar.isPending}
+            className="absolute inset-x-0 bottom-0 flex h-6 items-center justify-center gap-1 rounded-b-full bg-ink-900/70 text-[10px] font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100 disabled:opacity-40"
+            title="Change profile photo"
+          >
+            <Camera className="h-3 w-3" aria-hidden /> Change
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={AVATAR_ACCEPT.join(',')}
+            className="hidden"
+            aria-label="Upload profile photo"
+            onChange={handleAvatarChange}
+          />
         </span>
         <div className="min-w-0">
           <p className="truncate font-sans text-lg font-bold text-ink-900">
@@ -166,6 +275,31 @@ export default function ProfilePage() {
             {me.data ? (
               <Badge tone={USER_STATUS[me.data.status].tone}>{USER_STATUS[me.data.status].label}</Badge>
             ) : null}
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-ink-500">
+            {me.data?.avatarUrl ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="-ml-2 h-7 px-2 text-xs text-ink-500 hover:text-error"
+                loading={removeAvatar.isPending}
+                onClick={() => removeAvatar.mutate()}
+              >
+                <Trash2 className="h-3.5 w-3.5" aria-hidden /> Remove photo
+              </Button>
+            ) : (
+              <span>
+                No photo yet — we look up your{' '}
+                <button
+                  type="button"
+                  className="underline decoration-dotted underline-offset-2"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  Gmail/Gravatar
+                </button>{' '}
+                image automatically, or use your initials.
+              </span>
+            )}
           </div>
         </div>
       </div>

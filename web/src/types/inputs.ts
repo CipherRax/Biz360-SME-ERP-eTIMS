@@ -11,7 +11,10 @@ import type {
   PaymentMethod,
   PurchaseOrderStatus,
   Role,
+  SupplierEtimsCaptureMethod,
   UserStatus,
+  WithholdingTaxPaymentType,
+  WithholdingTaxResidency,
 } from './domain';
 
 export interface DocumentLineInput {
@@ -22,6 +25,40 @@ export interface DocumentLineInput {
   taxRate?: string;
   discountPct?: string;
   lineDiscount?: string;
+}
+
+// ---- Kenya compliance (addendum Tier 1) -------------------------------------
+export interface CaptureSupplierEtimsInput {
+  supplierId: string;
+  kraInvoiceNumber: string;
+  kraControlUnitId?: string;
+  kraQrCodeData?: string;
+  invoiceDate: string;
+  amount: string;
+  vatAmount?: string;
+  captureMethod?: SupplierEtimsCaptureMethod;
+}
+
+export interface ScanSupplierEtimsInput {
+  data: string;
+  supplierId?: string;
+}
+
+export interface MatchSupplierEtimsInput {
+  purchaseInvoiceId: string;
+}
+
+export interface UpsertWhtRateInput {
+  paymentType: WithholdingTaxPaymentType;
+  residency: WithholdingTaxResidency;
+  ratePercent: string;
+  defaults?: boolean;
+  effectiveFrom?: string;
+  effectiveTo?: string;
+}
+
+export interface RecordWhtInput {
+  paymentId: string;
 }
 
 export interface PartyInput {

@@ -34,6 +34,8 @@ enum OutboxEventType {
   PASSWORD_RESET
   ETIMS_INVOICE_SUBMIT
   ETIMS_CREDIT_NOTE_SUBMIT
+  ETIMS_SUPPLIER_OCR
+  ETIMS_SUPPLIER_VERIFY
   WEBHOOK
   NOTIFICATION
 }
@@ -232,6 +234,10 @@ model Organization {
   bankStatementLines      BankStatementLine[]
   bankReconciliations     BankReconciliation[]
   notifications           Notification[]
+  supplierEtimsInvoices   SupplierEtimsInvoice[]
+  expenseComplianceFlags  ExpenseComplianceFlag[]
+  withholdingTaxRates     WithholdingTaxRate[]
+  withholdingTaxDeductions WithholdingTaxDeduction[]
 
   @@map("organizations")
 }
@@ -264,6 +270,7 @@ model User {
   email           String       @unique
   passwordHash    String
   name            String
+  avatarUrl       String?
   role            Role         @default(STAFF)
   status          UserStatus   @default(PENDING)
   failedLoginAttempts Int      @default(0)
@@ -534,6 +541,7 @@ model Party {
   creditLimit       Decimal?     @db.Decimal(18, 2)
   paymentTermsDays  Int          @default(30)
   notes             String?
+  kraPinVerifiedAt  DateTime?
   status            PartyStatus  @default(ACTIVE)
   deletedAt         DateTime?
   createdAt         DateTime     @default(now())
@@ -548,6 +556,8 @@ model Party {
   purchaseOrders PurchaseOrder[]
   goodsReceipts GoodsReceipt[]
   creditNotes CreditNote[]
+  supplierEtimsInvoices SupplierEtimsInvoice[]
+  withholdingTaxDeductions WithholdingTaxDeduction[]
 
   @@unique([organizationId, taxId])
   @@index([organizationId])
@@ -651,6 +661,8 @@ model Payment {
   createdBy        String?
   updatedBy        String?
 
+  withholdingDeductions WithholdingTaxDeduction[]
+
   @@index([organizationId, paidAt])
   @@index([partyId])
   @@index([invoiceId])
@@ -725,6 +737,8 @@ model PurchaseInvoice {
 
   lines    PurchaseInvoiceLine[]
   payments Payment[] @relation("PurchaseInvoicePayments")
+  supplierEtimsInvoices SupplierEtimsInvoice[]
+  expenseComplianceFlags ExpenseComplianceFlag[]
 
   @@unique([organizationId, invoiceNumber])
   @@index([organizationId, status])
@@ -1224,4 +1238,152 @@ model Notification {
   @@index([organizationId, status])
   @@index([organizationId, createdAt(sort: Desc)])
   @@map("notifications")
+}
+
+// ----------------- Compliance: supplier eTIMS capture -----------------------
+
+enum SupplierEtimsCaptureMethod {
+  MANUAL
+  OCR_SCAN
+  SUPPLIER_PORTAL_SYNC
+}
+
+enum SupplierEtimsMatchStatus {
+  UNMATCHED
+  MATCHED
+  DISPUTED
+  MISSING_CONFIRMED
+}
+
+enum SupplierEtimsVerificationStatus {
+  UNVERIFIED
+  VERIFIED_VIA_KRA_QR
+  VERIFICATION_FAILED
+}
+
+enum ExpenseComplianceFlagType {
+  NO_ETIMS_MATCH
+  PARTIAL_AMOUNT_MISMATCH
+  EXPIRED_MATCH_WINDOW
+}
+
+/// A supplier eTIMS receipt captured so it can be matched against a purchase.
+/// An expense is only tax-deductible once its purchase is backed by one of
+/// these (KRA cross-validates returns against eTIMS records from 2025 YOI).
+model SupplierEtimsInvoice {
+  id                       String                      @id @default(uuid())
+  organizationId           String
+  organization             Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  supplierId               String
+  supplier                 Party                       @relation(fields: [supplierId], references: [id])
+  kraInvoiceNumber         String
+  kraControlUnitId         String?
+  kraQrCodeData            String?
+  invoiceDate              DateTime
+  amount                   Decimal                     @default(0) @db.Decimal(18, 2)
+  vatAmount                Decimal                     @default(0) @db.Decimal(18, 2)
+  captureMethod            SupplierEtimsCaptureMethod  @default(MANUAL)
+  matchedPurchaseInvoiceId String?
+  matchedPurchaseInvoice   PurchaseInvoice?            @relation(fields: [matchedPurchaseInvoiceId], references: [id], onDelete: SetNull)
+  matchStatus              SupplierEtimsMatchStatus    @default(UNMATCHED)
+  verificationStatus       SupplierEtimsVerificationStatus @default(UNVERIFIED)
+  attachmentUrl            String?
+  ocrJobId                 String?
+  createdAt                DateTime                    @default(now())
+  updatedAt                DateTime                    @updatedAt
+  deletedAt                DateTime?
+
+  @@index([organizationId])
+  @@index([organizationId, matchStatus])
+  @@index([organizationId, supplierId])
+  @@index([organizationId, invoiceDate])
+  @@map("supplier_etims_invoices")
+}
+
+/// Accounts-payable compliance exposure. Created automatically for purchases
+/// that have no matched supplier eTIMS invoice, so owners can see "at-risk"
+/// spend instead of discovering it at year-end.
+model ExpenseComplianceFlag {
+  id                String                   @id @default(uuid())
+  organizationId    String
+  organization      Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  purchaseInvoiceId String
+  purchaseInvoice   PurchaseInvoice          @relation(fields: [purchaseInvoiceId], references: [id], onDelete: Cascade)
+  flagType          ExpenseComplianceFlagType
+  amountMismatch    Decimal?                 @db.Decimal(18, 2)
+  resolvedAt        DateTime?
+  resolutionNote    String?
+  createdAt         DateTime                 @default(now())
+
+  @@index([organizationId, flagType])
+  @@index([organizationId, purchaseInvoiceId])
+  @@index([purchaseInvoiceId])
+  @@map("expense_compliance_flags")
+}
+
+// --------------------------- Withholding tax ---------------------------------
+
+enum WithholdingTaxPaymentType {
+  PROFESSIONAL_FEES
+  RENT
+  COMMISSION
+  ROYALTY
+  DIVIDEND
+  INTEREST
+  CONTRACTUAL_FEES
+  OTHER
+}
+
+enum WithholdingTaxResidency {
+  RESIDENT
+  NON_RESIDENT
+}
+
+enum WithholdingTaxDeductionStatus {
+  CALCULATED
+  DEDUCTED
+  CERTIFICATE_GENERATED
+  REMITTED
+}
+
+/// Versioned WHT rate table. `organizationId` is null for KRA system defaults
+/// (5-30% depending on payment type/residency); tenants may override.
+model WithholdingTaxRate {
+  id            String                     @id @default(uuid())
+  organizationId String?
+  organization  Organization?              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  paymentType   WithholdingTaxPaymentType
+  residency     WithholdingTaxResidency    @default(RESIDENT)
+  ratePercent   Decimal                    @db.Decimal(5, 2)
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  updatedAt     DateTime                   @updatedAt
+
+  @@index([organizationId, paymentType, residency, effectiveFrom])
+  @@map("withholding_tax_rates")
+}
+
+model WithholdingTaxDeduction {
+  id                     String                       @id @default(uuid())
+  organizationId         String
+  organization           Organization                 @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  supplierId             String
+  supplier               Party                        @relation(fields: [supplierId], references: [id])
+  supplierPaymentId      String?
+  supplierPayment        Payment?                     @relation(fields: [supplierPaymentId], references: [id], onDelete: SetNull)
+  paymentType            WithholdingTaxPaymentType    @default(PROFESSIONAL_FEES)
+  grossAmount            Decimal                      @db.Decimal(18, 2)
+  ratePercent            Decimal                      @db.Decimal(5, 2)
+  whtAmount              Decimal                      @db.Decimal(18, 2)
+  netPayableAmount       Decimal                      @db.Decimal(18, 2)
+  kraWhtCertificateNumber String?
+  status                 WithholdingTaxDeductionStatus @default(CALCULATED)
+  remittanceDate         DateTime?
+  createdAt              DateTime                     @default(now())
+  updatedAt              DateTime                     @updatedAt
+
+  @@index([organizationId, status])
+  @@index([organizationId, supplierId])
+  @@index([organizationId, createdAt])
+  @@map("withholding_tax_deductions")
 }
