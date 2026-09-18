@@ -66,3 +66,72 @@ export class MatchSupplierEtimsDto {
   @IsUUID()
   purchaseInvoiceId!: string;
 }
+
+export class CreateSupplierEtimsCreditNoteDto {
+  @IsUUID()
+  supplierId!: string;
+
+  /** KRA-issued credit note (ETCR) number, distinct from the original invoice. */
+  @IsString()
+  @Matches(/^[A-Za-z0-9\/\-\s]{6,60}$/, {
+    message: 'kraInvoiceNumber must be the credit note number issued by KRA',
+  })
+  kraInvoiceNumber!: string;
+
+  /** The supplier's reference to the invoice being credited, if printed. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  originalInvoiceNumber?: string;
+
+  @IsOptional()
+  @IsUUID()
+  originalEtimsInvoiceId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  originalPurchaseInvoiceId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(4000)
+  kraQrCodeData?: string;
+
+  @IsDateString()
+  creditNoteDate!: string;
+
+  @IsString()
+  @Matches(MONEY_PATTERN, {
+    message: 'amount must be a positive amount with up to 2 decimals',
+  })
+  amount!: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(MONEY_PATTERN)
+  vatAmount?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+
+  @IsOptional()
+  @IsEnum(SupplierEtimsCaptureMethod)
+  captureMethod?: SupplierEtimsCaptureMethod;
+}
+
+export class MatchSupplierEtimsCreditNoteDto {
+  @IsOptional()
+  @IsUUID()
+  originalEtimsInvoiceId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  purchaseInvoiceId?: string;
+
+  /** WHT deduction to offset (must relate to a payment to the same supplier). */
+  @IsOptional()
+  @IsUUID()
+  whtOffsetDeductionId?: string;
+}

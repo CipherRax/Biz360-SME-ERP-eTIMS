@@ -13,12 +13,15 @@ import type {
   WhtRemittanceSummary,
 } from '@/types/domain';
 import type {
+  CaptureSupplierEtimsCreditNoteInput,
   CaptureSupplierEtimsInput,
+  MatchSupplierEtimsCreditNoteInput,
   MatchSupplierEtimsInput,
   RecordWhtInput,
   ScanSupplierEtimsInput,
   UpsertWhtRateInput,
 } from '@/types/inputs';
+import type { SupplierEtimsCreditNote } from '@/types/domain';
 
 export interface UnmatchedExpenseParams extends CursorListParams {
   limit?: number;
@@ -67,6 +70,31 @@ export const supplierEtimsApi = {
 export const expenseExposureApi = {
   summary: () =>
     api.get<EtimsExposureSummary>('/etims/compliance/exposure-summary'),
+};
+
+/** Tier 2 – supplier eTIMS credit notes (KRA ETCR). */
+export const supplierCreditApi = {
+  capture: (input: CaptureSupplierEtimsCreditNoteInput, idempotencyKey?: string) =>
+    api.post<SupplierEtimsCreditNote>('/etims/supplier-credit-notes', input, { idempotencyKey }),
+  verify: (id: string, idempotencyKey?: string) =>
+    api.post<{ creditNoteId: string; status: string; message: string }>(
+      `/etims/supplier-credit-notes/${id}/verify`,
+      undefined,
+      { idempotencyKey },
+    ),
+  match: (id: string, input: MatchSupplierEtimsCreditNoteInput, idempotencyKey?: string) =>
+    api.post<SupplierEtimsCreditNote>(`/etims/supplier-credit-notes/${id}/match`, input, {
+      idempotencyKey,
+    }),
+  unmatched: (params: UnmatchedExpenseParams = {}) =>
+    api.get<{ data: SupplierEtimsCreditNote[]; nextCursor?: string }>(
+      '/etims/supplier-credit-notes/unmatched',
+      { query: params },
+    ),
+  list: (params: SupplierEtimsListParams = {}) =>
+    api.get<{ data: SupplierEtimsCreditNote[]; nextCursor?: string }>('/etims/supplier-credit-notes', {
+      query: params,
+    }),
 };
 
 /** A2 – withholding tax. */

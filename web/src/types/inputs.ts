@@ -61,6 +61,26 @@ export interface RecordWhtInput {
   paymentId: string;
 }
 
+export interface CaptureSupplierEtimsCreditNoteInput {
+  supplierId: string;
+  kraInvoiceNumber: string;
+  originalInvoiceNumber?: string;
+  originalEtimsInvoiceId?: string;
+  originalPurchaseInvoiceId?: string;
+  kraQrCodeData?: string;
+  creditNoteDate: string;
+  amount: string;
+  vatAmount?: string;
+  reason?: string;
+  captureMethod?: SupplierEtimsCaptureMethod;
+}
+
+export interface MatchSupplierEtimsCreditNoteInput {
+  originalEtimsInvoiceId?: string;
+  purchaseInvoiceId?: string;
+  whtOffsetDeductionId?: string;
+}
+
 export interface PartyInput {
   type: PartyType;
   name: string;

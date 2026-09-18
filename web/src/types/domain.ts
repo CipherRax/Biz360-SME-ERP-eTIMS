@@ -603,8 +603,32 @@ export interface UnmatchedExpense {
 export interface EtimsExposureSummary {
   unmatchedCount: number;
   totalExposure: number;
+  creditedAmount: number;
+  creditNoteCount: number;
   oldestUnmatchedAt?: string | null;
   agesInDays: number;
+}
+
+export interface SupplierEtimsCreditNote {
+  id: string;
+  supplierId: string;
+  supplier: { id: string; name: string; taxId?: string | null };
+  kraInvoiceNumber: string;
+  originalInvoiceNumber?: string | null;
+  originalEtimsInvoiceId?: string | null;
+  originalPurchaseInvoiceId?: string | null;
+  originalPurchaseInvoice?: { id: string; invoiceNumber: string } | null;
+  creditNoteDate: string;
+  amount: number;
+  vatAmount: number;
+  totalAmount: number;
+  reason?: string | null;
+  captureMethod: SupplierEtimsCaptureMethod;
+  matchStatus: SupplierEtimsMatchStatus;
+  verificationStatus: SupplierEtimsVerificationStatus;
+  whtOffsetAmount?: number | null;
+  whtOffsetDeductionId?: string | null;
+  createdAt: string;
 }
 
 export interface ScanResult {
@@ -666,7 +690,14 @@ export interface WithholdingTaxDeduction {
 
 export interface WhtRemittanceSummary {
   range: { from: string; to: string };
-  totals: { grossAmount: string; whtAmount: string; count: number };
+  totals: {
+    grossAmount: string;
+    whtAmount: string;
+    offsetAmount: string;
+    remittableWhtAmount: string;
+    count: number;
+    offsetCount: number;
+  };
   byPaymentType: Array<{
     paymentType: WithholdingTaxPaymentType;
     grossAmount: string;

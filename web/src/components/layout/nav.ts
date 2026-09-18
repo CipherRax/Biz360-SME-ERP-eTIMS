@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import {
+  BadgePercent,
   BarChart3,
   BookOpen,
   Boxes,
@@ -50,6 +51,12 @@ export const NAV_ITEMS: NavItem[] = [
     href: '/compliance/wht',
     label: 'Withholding Tax',
     icon: FileWarning,
+    roles: FINANCE,
+  },
+  {
+    href: '/compliance/credits',
+    label: 'Supplier Credit Notes',
+    icon: BadgePercent,
     roles: FINANCE,
   },
   { href: '/reports', label: 'Reports', icon: BarChart3, roles: FINANCE },

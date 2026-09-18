@@ -287,12 +287,13 @@ export class WithholdingTaxService {
     });
   }
 
-  /** Monthly remittance summary KRA expects from the payer. */
+  /** Monthly remittance summary KRA expects from the payer, net of supplier credit-note offsets. */
   async remittanceSummary(organizationId: string, dto: CalculateWithholdingTaxDto) {
     const range = this.dateRange(dto);
     const rows = await this.prisma.client.withholdingTaxDeduction.findMany({
       where: { organizationId, createdAt: range },
       select: {
+        id: true,
         paymentType: true,
         grossAmount: true,
         whtAmount: true,
@@ -313,9 +314,35 @@ export class WithholdingTaxService {
 
     const gross = rows.reduce((a, r) => a.add(r.grossAmount), new Prisma.Decimal(0));
     const wht = rows.reduce((a, r) => a.add(r.whtAmount), new Prisma.Decimal(0));
+
+    const deductionIds = rows.map((r) => r.id);
+    const offsets = deductionIds.length
+      ? await this.prisma.client.supplierEtimsCreditNote.findMany({
+          where: {
+            organizationId,
+            matchStatus: 'MATCHED',
+            whtOffsetDeductionId: { in: deductionIds },
+            whtOffsetAmount: { not: null },
+            deletedAt: null,
+          },
+          select: { whtOffsetAmount: true },
+        })
+      : [];
+    const offset = offsets.reduce(
+      (a, c) => a.add(c.whtOffsetAmount ?? new Prisma.Decimal(0)),
+      new Prisma.Decimal(0),
+    );
+
     return {
       range: { from: range.gte, to: range.lte },
-      totals: { grossAmount: gross.toFixed(2), whtAmount: wht.toFixed(2), count: rows.length },
+      totals: {
+        grossAmount: gross.toFixed(2),
+        whtAmount: wht.toFixed(2),
+        offsetAmount: offset.toFixed(2),
+        remittableWhtAmount: wht.sub(offset).toFixed(2),
+        count: rows.length,
+        offsetCount: offsets.length,
+      },
       byPaymentType: Array.from(byType.entries()).map(([key, v]) => ({
         paymentType: key,
         grossAmount: v.gross.toFixed(2),

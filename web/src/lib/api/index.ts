@@ -9,6 +9,7 @@ export {
   supplierEtimsApi,
   expenseExposureApi,
   withholdingTaxApi,
+  supplierCreditApi,
 } from './compliance';
 export { reportingApi } from './reporting';
 export {

@@ -5,6 +5,7 @@ import { PrismaService } from '../../../prisma/prisma.service.js';
 
 type Payload = {
   invoiceId?: string | null;
+  creditNoteId?: string | null;
   jobId?: string | null;
   fileKey?: string | null;
   kraQrCodeData?: string | null;
@@ -35,6 +36,9 @@ export class SupplierEtimsHandlerRegistrar {
     });
     this.dispatcher.register('ETIMS_SUPPLIER_VERIFY', {
       handle: (payload, context) => this.verify(payload as Payload, context),
+    });
+    this.dispatcher.register('ETIMS_SUPPLIER_CREDIT_VERIFY', {
+      handle: (payload, context) => this.verifyCredit(payload as Payload, context),
     });
   }
 
@@ -67,6 +71,26 @@ export class SupplierEtimsHandlerRegistrar {
     });
     this.logger.log(
       `[verify] org ${context.organizationId} invoice ${payload.invoiceId} -> ${
+        selfConsistent ? 'VERIFIED_VIA_KRA_QR (self-checked)' : 'VERIFICATION_FAILED'
+      }`,
+    );
+  }
+
+  private async verifyCredit(payload: Payload, context: OutboxDispatchContext): Promise<void> {
+    if (!payload.creditNoteId) return;
+    const qr = payload.kraQrCodeData;
+    const selfConsistent = !!qr && qr.length >= 20;
+    await this.prisma.client.supplierEtimsCreditNote.update({
+      where: { id: payload.creditNoteId },
+      data: {
+        verificationStatus: selfConsistent
+          ? SupplierEtimsVerificationStatus.VERIFIED_VIA_KRA_QR
+          : SupplierEtimsVerificationStatus.VERIFICATION_FAILED,
+        ...(selfConsistent ? { kraQrCodeData: qr } : {}),
+      },
+    });
+    this.logger.log(
+      `[verify-credit] org ${context.organizationId} credit note ${payload.creditNoteId} -> ${
         selfConsistent ? 'VERIFIED_VIA_KRA_QR (self-checked)' : 'VERIFICATION_FAILED'
       }`,
     );

@@ -17,7 +17,9 @@ import type { AuthenticatedUser } from '../../../common/decorators/current-user.
 import { Audit } from '../../../common/decorators/audit.decorator.js';
 import { SupplierEtimsService } from './supplier-etims.service.js';
 import {
+  CreateSupplierEtimsCreditNoteDto,
   CreateSupplierEtimsInvoiceDto,
+  MatchSupplierEtimsCreditNoteDto,
   MatchSupplierEtimsDto,
   ScanSupplierEtimsDto,
 } from './dto/supplier-etims.dto.js';
@@ -103,5 +105,64 @@ export class ExpenseExposureController {
   exposure(@CurrentUser() user: AuthenticatedUser) {
     if (!user) throw new BadRequestException('Not authenticated');
     return this.service.exposureSummary(user.orgId);
+  }
+}
+
+@ApiTags('compliance')
+@ApiBearerAuth()
+@Controller('etims/supplier-credit-notes')
+export class SupplierEtimsCreditController {
+  constructor(private readonly service: SupplierEtimsService) {}
+
+  private require(user: AuthenticatedUser | undefined): asserts user is AuthenticatedUser {
+    if (!user) throw new BadRequestException('Not authenticated');
+  }
+
+  @Post()
+  @Audit('SupplierEtimsCreditNote')
+  create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateSupplierEtimsCreditNoteDto) {
+    this.require(user);
+    return this.service.createCreditNote(user.orgId, dto);
+  }
+
+  @Get()
+  list(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('limit', new ParseIntPipe({ optional: true })) limit = 50,
+    @Query('cursor') cursor?: string,
+    @Query('supplierId', new ParseUUIDPipe({ optional: true })) supplierId?: string,
+    @Query('matchStatus', new ParseEnumPipe(SupplierEtimsMatchStatus, { optional: true }))
+    matchStatus?: SupplierEtimsMatchStatus,
+  ) {
+    this.require(user);
+    return this.service.listCreditNotes(user.orgId, { limit, cursor, supplierId, matchStatus });
+  }
+
+  @Get('unmatched')
+  unmatched(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('limit', new ParseIntPipe({ optional: true })) limit = 50,
+    @Query('cursor') cursor?: string,
+  ) {
+    this.require(user);
+    return this.service.unmatchedCreditNotes(user.orgId, limit, cursor);
+  }
+
+  @Post(':id/verify')
+  @Audit('SupplierEtimsCreditNote')
+  verify(@CurrentUser() user: AuthenticatedUser, @Param('id', new ParseUUIDPipe()) id: string) {
+    this.require(user);
+    return this.service.verifyCreditNote(user.orgId, id);
+  }
+
+  @Post(':id/match')
+  @Audit('SupplierEtimsCreditNote')
+  match(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: MatchSupplierEtimsCreditNoteDto,
+  ) {
+    this.require(user);
+    return this.service.matchCreditNote(user.orgId, id, dto);
   }
 }

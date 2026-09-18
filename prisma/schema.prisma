@@ -36,6 +36,7 @@ enum OutboxEventType {
   ETIMS_CREDIT_NOTE_SUBMIT
   ETIMS_SUPPLIER_OCR
   ETIMS_SUPPLIER_VERIFY
+  ETIMS_SUPPLIER_CREDIT_VERIFY
   WEBHOOK
   NOTIFICATION
 }
@@ -193,51 +194,52 @@ model Organization {
   updatedAt    DateTime  @updatedAt
   deletedAt    DateTime?
 
-  users                   User[]
-  settings                OrganizationSetting?
-  refreshTokens           RefreshToken[]
-  auditLogs               AuditLog[]
-  outboxEvents            OutboxEvent[]
-  idempotencyKeys         IdempotencyKey[]
-  apiKeys                 ApiKey[]
-  emailVerificationTokens EmailVerificationToken[]
-  passwordResetTokens     PasswordResetToken[]
-  itemCategories          ItemCategory[]
-  unitsOfMeasure          UnitOfMeasure[]
-  items                   Item[]
-  parties                 Party[]
-  saleInvoices            SaleInvoice[]
-  saleInvoiceLines        SaleInvoiceLine[]
-  payments                Payment[]
-  invoiceNumberSeqs       InvoiceNumberSeq[]
-  purchaseInvoices        PurchaseInvoice[]
-  purchaseInvoiceLines    PurchaseInvoiceLine[]
-  purchaseInvoiceSeqs     PurchaseInvoiceSeq[]
-  stockMovements          StockMovement[]
-  accounts                Account[]
-  journalEntries          JournalEntry[]
-  journalEntryLines       JournalEntryLine[]
-  journalEntrySeqs        JournalEntrySeq[]
-  quotations              Quotation[]
-  quotationLines          QuotationLine[]
-  quotationNumberSeqs     QuotationNumberSeq[]
-  purchaseOrders          PurchaseOrder[]
-  purchaseOrderLines      PurchaseOrderLine[]
-  purchaseOrderNumberSeqs PurchaseOrderNumberSeq[]
-  goodsReceipts           GoodsReceipt[]
-  goodsReceiptLines       GoodsReceiptLine[]
-  goodsReceiptNumberSeqs  GoodsReceiptNumberSeq[]
-  creditNotes             CreditNote[]
-  creditNoteLines         CreditNoteLine[]
-  creditNoteNumberSeqs    CreditNoteNumberSeq[]
-  bankAccounts            BankAccount[]
-  bankStatementLines      BankStatementLine[]
-  bankReconciliations     BankReconciliation[]
-  notifications           Notification[]
-  supplierEtimsInvoices   SupplierEtimsInvoice[]
-  expenseComplianceFlags  ExpenseComplianceFlag[]
-  withholdingTaxRates     WithholdingTaxRate[]
+  users                    User[]
+  settings                 OrganizationSetting?
+  refreshTokens            RefreshToken[]
+  auditLogs                AuditLog[]
+  outboxEvents             OutboxEvent[]
+  idempotencyKeys          IdempotencyKey[]
+  apiKeys                  ApiKey[]
+  emailVerificationTokens  EmailVerificationToken[]
+  passwordResetTokens      PasswordResetToken[]
+  itemCategories           ItemCategory[]
+  unitsOfMeasure           UnitOfMeasure[]
+  items                    Item[]
+  parties                  Party[]
+  saleInvoices             SaleInvoice[]
+  saleInvoiceLines         SaleInvoiceLine[]
+  payments                 Payment[]
+  invoiceNumberSeqs        InvoiceNumberSeq[]
+  purchaseInvoices         PurchaseInvoice[]
+  purchaseInvoiceLines     PurchaseInvoiceLine[]
+  purchaseInvoiceSeqs      PurchaseInvoiceSeq[]
+  stockMovements           StockMovement[]
+  accounts                 Account[]
+  journalEntries           JournalEntry[]
+  journalEntryLines        JournalEntryLine[]
+  journalEntrySeqs         JournalEntrySeq[]
+  quotations               Quotation[]
+  quotationLines           QuotationLine[]
+  quotationNumberSeqs      QuotationNumberSeq[]
+  purchaseOrders           PurchaseOrder[]
+  purchaseOrderLines       PurchaseOrderLine[]
+  purchaseOrderNumberSeqs  PurchaseOrderNumberSeq[]
+  goodsReceipts            GoodsReceipt[]
+  goodsReceiptLines        GoodsReceiptLine[]
+  goodsReceiptNumberSeqs   GoodsReceiptNumberSeq[]
+  creditNotes              CreditNote[]
+  creditNoteLines          CreditNoteLine[]
+  creditNoteNumberSeqs     CreditNoteNumberSeq[]
+  bankAccounts             BankAccount[]
+  bankStatementLines       BankStatementLine[]
+  bankReconciliations      BankReconciliation[]
+  notifications            Notification[]
+  supplierEtimsInvoices    SupplierEtimsInvoice[]
+  expenseComplianceFlags   ExpenseComplianceFlag[]
+  withholdingTaxRates      WithholdingTaxRate[]
   withholdingTaxDeductions WithholdingTaxDeduction[]
+  supplierEtimsCreditNotes SupplierEtimsCreditNote[]
 
   @@map("organizations")
 }
@@ -264,25 +266,25 @@ model OrganizationSetting {
 // ------------------------------- Users -------------------------------------
 
 model User {
-  id              String       @id @default(uuid())
-  organizationId  String
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  email           String       @unique
-  passwordHash    String
-  name            String
-  avatarUrl       String?
-  role            Role         @default(STAFF)
-  status          UserStatus   @default(PENDING)
-  failedLoginAttempts Int      @default(0)
-  lockedUntil     DateTime?
-  preferences     Json?
-  emailVerifiedAt DateTime?
-  lastLoginAt     DateTime?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-  deletedAt       DateTime?
-  createdBy       String?
-  updatedBy       String?
+  id                  String       @id @default(uuid())
+  organizationId      String
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email               String       @unique
+  passwordHash        String
+  name                String
+  avatarUrl           String?
+  role                Role         @default(STAFF)
+  status              UserStatus   @default(PENDING)
+  failedLoginAttempts Int          @default(0)
+  lockedUntil         DateTime?
+  preferences         Json?
+  emailVerifiedAt     DateTime?
+  lastLoginAt         DateTime?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  deletedAt           DateTime?
+  createdBy           String?
+  updatedBy           String?
 
   refreshTokens           RefreshToken[]
   emailVerificationTokens EmailVerificationToken[]
@@ -504,13 +506,13 @@ model Item {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  saleLines SaleInvoiceLine[]
-  purchaseLines PurchaseInvoiceLine[]
-  stockMovements StockMovement[]
-  quotationLines QuotationLine[]
+  saleLines          SaleInvoiceLine[]
+  purchaseLines      PurchaseInvoiceLine[]
+  stockMovements     StockMovement[]
+  quotationLines     QuotationLine[]
   purchaseOrderLines PurchaseOrderLine[]
-  goodsReceiptLines GoodsReceiptLine[]
-  creditNoteLines CreditNoteLine[]
+  goodsReceiptLines  GoodsReceiptLine[]
+  creditNoteLines    CreditNoteLine[]
 
   @@unique([organizationId, sku])
   @@index([organizationId])
@@ -523,41 +525,42 @@ model Item {
 /// Customer and supplier records (single table, discriminated by `type`).
 /// `taxId` is the KRA PIN — the natural key for eTIMS invoicing.
 model Party {
-  id                String       @id @default(uuid())
-  organizationId    String
-  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  type              PartyType    @default(CUSTOMER)
-  name              String
-  email             String?
-  phone             String?
-  taxId             String?
-  website           String?
-  addressLine1      String?
-  addressLine2      String?
-  city              String?
-  state             String?
-  country           String       @default("KE")
-  postalCode        String?
-  creditLimit       Decimal?     @db.Decimal(18, 2)
-  paymentTermsDays  Int          @default(30)
-  notes             String?
-  kraPinVerifiedAt  DateTime?
-  status            PartyStatus  @default(ACTIVE)
-  deletedAt         DateTime?
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
-  createdBy         String?
-  updatedBy         String?
+  id               String       @id @default(uuid())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  type             PartyType    @default(CUSTOMER)
+  name             String
+  email            String?
+  phone            String?
+  taxId            String?
+  website          String?
+  addressLine1     String?
+  addressLine2     String?
+  city             String?
+  state            String?
+  country          String       @default("KE")
+  postalCode       String?
+  creditLimit      Decimal?     @db.Decimal(18, 2)
+  paymentTermsDays Int          @default(30)
+  notes            String?
+  kraPinVerifiedAt DateTime?
+  status           PartyStatus  @default(ACTIVE)
+  deletedAt        DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  createdBy        String?
+  updatedBy        String?
 
-  saleInvoices SaleInvoice[]
-  payments     Payment[]
-  purchaseInvoices PurchaseInvoice[]
-  quotations Quotation[]
-  purchaseOrders PurchaseOrder[]
-  goodsReceipts GoodsReceipt[]
-  creditNotes CreditNote[]
-  supplierEtimsInvoices SupplierEtimsInvoice[]
+  saleInvoices             SaleInvoice[]
+  payments                 Payment[]
+  purchaseInvoices         PurchaseInvoice[]
+  quotations               Quotation[]
+  purchaseOrders           PurchaseOrder[]
+  goodsReceipts            GoodsReceipt[]
+  creditNotes              CreditNote[]
+  supplierEtimsInvoices    SupplierEtimsInvoice[]
   withholdingTaxDeductions WithholdingTaxDeduction[]
+  supplierEtimsCreditNotes SupplierEtimsCreditNote[]
 
   @@unique([organizationId, taxId])
   @@index([organizationId])
@@ -570,39 +573,39 @@ model Party {
 /// Financial documents are immutable: they are never hard-deleted. `VOID`
 /// reverses a document; stock movements only happen on CONFIRM / VOID.
 model SaleInvoice {
-  id              String        @id @default(uuid())
-  organizationId  String
-  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  invoiceNumber   String
-  type            InvoiceType   @default(INVOICE)
-  partyId         String
-  party           Party         @relation(fields: [partyId], references: [id])
-  invoiceDate     DateTime      @default(now())
-  dueDate         DateTime?
-  status          InvoiceStatus @default(DRAFT)
-  subtotal        Decimal       @default(0) @db.Decimal(18, 2)
-  discountTotal   Decimal       @default(0) @db.Decimal(18, 2)
-  taxTotal        Decimal       @default(0) @db.Decimal(18, 2)
-  total           Decimal       @default(0) @db.Decimal(18, 2)
-  amountPaid      Decimal       @default(0) @db.Decimal(18, 2)
-  currency        String        @default("KES")
-  notes           String?
+  id                     String        @id @default(uuid())
+  organizationId         String
+  organization           Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoiceNumber          String
+  type                   InvoiceType   @default(INVOICE)
+  partyId                String
+  party                  Party         @relation(fields: [partyId], references: [id])
+  invoiceDate            DateTime      @default(now())
+  dueDate                DateTime?
+  status                 InvoiceStatus @default(DRAFT)
+  subtotal               Decimal       @default(0) @db.Decimal(18, 2)
+  discountTotal          Decimal       @default(0) @db.Decimal(18, 2)
+  taxTotal               Decimal       @default(0) @db.Decimal(18, 2)
+  total                  Decimal       @default(0) @db.Decimal(18, 2)
+  amountPaid             Decimal       @default(0) @db.Decimal(18, 2)
+  currency               String        @default("KES")
+  notes                  String?
   // eTIMS (KRA) submission results — set by the submission worker.
-etimsCtrlNo    String?
-  etimsReceipt   String?
-  etimsSubmittedAt DateTime?
-  etimsCreditCtrlNo String?
-  etimsCreditReceipt String?
+  etimsCtrlNo            String?
+  etimsReceipt           String?
+  etimsSubmittedAt       DateTime?
+  etimsCreditCtrlNo      String?
+  etimsCreditReceipt     String?
   etimsCreditSubmittedAt DateTime?
-  voidedAt       DateTime?
-  voidReason     String?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  createdBy      String?
-  updatedBy      String?
+  voidedAt               DateTime?
+  voidReason             String?
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+  createdBy              String?
+  updatedBy              String?
 
-  lines    SaleInvoiceLine[]
-  payments Payment[] @relation("SaleInvoicePayments")
+  lines       SaleInvoiceLine[]
+  payments    Payment[]         @relation("SaleInvoicePayments")
   creditNotes CreditNote[]
 
   @@unique([organizationId, invoiceNumber])
@@ -613,23 +616,23 @@ etimsCtrlNo    String?
 }
 
 model SaleInvoiceLine {
-  id            String        @id @default(uuid())
+  id             String       @id @default(uuid())
   organizationId String
-  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  invoiceId     String
-  invoice       SaleInvoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  itemId        String?
-  item          Item?         @relation(fields: [itemId], references: [id], onDelete: SetNull)
-  description   String
-  quantity      Decimal       @default(1) @db.Decimal(18, 3)
-  unitPrice     Decimal       @default(0) @db.Decimal(18, 2)
-  taxRate       Decimal       @default(0) @db.Decimal(5, 2)
-  discountPct   Decimal       @default(0) @db.Decimal(5, 2)
-  lineDiscount  Decimal       @default(0) @db.Decimal(18, 2)
-  lineAmount    Decimal       @default(0) @db.Decimal(18, 2)
-  lineTotal     Decimal       @default(0) @db.Decimal(18, 2)
-  taxAmount     Decimal       @default(0) @db.Decimal(18, 2)
-  sortOrder     Int           @default(0)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoiceId      String
+  invoice        SaleInvoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  itemId         String?
+  item           Item?        @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  description    String
+  quantity       Decimal      @default(1) @db.Decimal(18, 3)
+  unitPrice      Decimal      @default(0) @db.Decimal(18, 2)
+  taxRate        Decimal      @default(0) @db.Decimal(5, 2)
+  discountPct    Decimal      @default(0) @db.Decimal(5, 2)
+  lineDiscount   Decimal      @default(0) @db.Decimal(18, 2)
+  lineAmount     Decimal      @default(0) @db.Decimal(18, 2)
+  lineTotal      Decimal      @default(0) @db.Decimal(18, 2)
+  taxAmount      Decimal      @default(0) @db.Decimal(18, 2)
+  sortOrder      Int          @default(0)
 
   @@index([invoiceId])
   @@index([itemId])
@@ -639,27 +642,27 @@ model SaleInvoiceLine {
 
 /// Receipt / payment — linked to either a sale or purchase invoice (but not both).
 model Payment {
-  id               String        @id @default(uuid())
-  organizationId   String
-  organization     Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  partyId          String
-  party            Party         @relation(fields: [partyId], references: [id])
+  id                String           @id @default(uuid())
+  organizationId    String
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  partyId           String
+  party             Party            @relation(fields: [partyId], references: [id])
   // Link to the sale OR purchase invoice (exactly one set).
-  invoiceId        String?
-  invoice          SaleInvoice?  @relation("SaleInvoicePayments", fields: [invoiceId], references: [id], onDelete: SetNull)
+  invoiceId         String?
+  invoice           SaleInvoice?     @relation("SaleInvoicePayments", fields: [invoiceId], references: [id], onDelete: SetNull)
   purchaseInvoiceId String?
-  purchaseInvoice  PurchaseInvoice? @relation("PurchaseInvoicePayments", fields: [purchaseInvoiceId], references: [id], onDelete: SetNull)
-  amount           Decimal       @db.Decimal(18, 2)
-  method           PaymentMethod @default(CASH)
-  reference        String?
-  paidAt           DateTime      @default(now())
-  receivedById     String?
-  receivedBy       User?         @relation(fields: [receivedById], references: [id])
-  notes            String?
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
-  createdBy        String?
-  updatedBy        String?
+  purchaseInvoice   PurchaseInvoice? @relation("PurchaseInvoicePayments", fields: [purchaseInvoiceId], references: [id], onDelete: SetNull)
+  amount            Decimal          @db.Decimal(18, 2)
+  method            PaymentMethod    @default(CASH)
+  reference         String?
+  paidAt            DateTime         @default(now())
+  receivedById      String?
+  receivedBy        User?            @relation(fields: [receivedById], references: [id])
+  notes             String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  createdBy         String?
+  updatedBy         String?
 
   withholdingDeductions WithholdingTaxDeduction[]
 
@@ -707,38 +710,39 @@ model StockMovement {
 /// Supplier bill. Reuses the sales `InvoiceStatus` flow and the `Payment`
 /// table (accounts payable). Confirming increments stock (PURCHASE_IN).
 model PurchaseInvoice {
-  id             String        @id @default(uuid())
-  organizationId String
-  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  invoiceNumber  String
-  supplierRef    String?
-  partyId        String
-  party          Party         @relation(fields: [partyId], references: [id])
-  invoiceDate    DateTime      @default(now())
-  dueDate        DateTime?
-  status         InvoiceStatus @default(DRAFT)
-  subtotal       Decimal       @default(0) @db.Decimal(18, 2)
-  discountTotal  Decimal       @default(0) @db.Decimal(18, 2)
-  taxTotal       Decimal       @default(0) @db.Decimal(18, 2)
-  total          Decimal       @default(0) @db.Decimal(18, 2)
-  amountPaid     Decimal       @default(0) @db.Decimal(18, 2)
-  currency       String        @default("KES")
-  notes          String?
+  id               String        @id @default(uuid())
+  organizationId   String
+  organization     Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoiceNumber    String
+  supplierRef      String?
+  partyId          String
+  party            Party         @relation(fields: [partyId], references: [id])
+  invoiceDate      DateTime      @default(now())
+  dueDate          DateTime?
+  status           InvoiceStatus @default(DRAFT)
+  subtotal         Decimal       @default(0) @db.Decimal(18, 2)
+  discountTotal    Decimal       @default(0) @db.Decimal(18, 2)
+  taxTotal         Decimal       @default(0) @db.Decimal(18, 2)
+  total            Decimal       @default(0) @db.Decimal(18, 2)
+  amountPaid       Decimal       @default(0) @db.Decimal(18, 2)
+  currency         String        @default("KES")
+  notes            String?
   // eTIMS (KRA) received-invoice results — set by the submission worker.
-  etimsCtrlNo    String?
-  etimsReceipt   String?
+  etimsCtrlNo      String?
+  etimsReceipt     String?
   etimsSubmittedAt DateTime?
-  voidedAt       DateTime?
-  voidReason     String?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  createdBy      String?
-  updatedBy      String?
+  voidedAt         DateTime?
+  voidReason       String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  createdBy        String?
+  updatedBy        String?
 
-  lines    PurchaseInvoiceLine[]
-  payments Payment[] @relation("PurchaseInvoicePayments")
-  supplierEtimsInvoices SupplierEtimsInvoice[]
-  expenseComplianceFlags ExpenseComplianceFlag[]
+  lines                    PurchaseInvoiceLine[]
+  payments                 Payment[]                 @relation("PurchaseInvoicePayments")
+  supplierEtimsInvoices    SupplierEtimsInvoice[]
+  supplierEtimsCreditNotes SupplierEtimsCreditNote[]
+  expenseComplianceFlags   ExpenseComplianceFlag[]
 
   @@unique([organizationId, invoiceNumber])
   @@index([organizationId, status])
@@ -748,23 +752,23 @@ model PurchaseInvoice {
 }
 
 model PurchaseInvoiceLine {
-  id             String            @id @default(uuid())
+  id             String          @id @default(uuid())
   organizationId String
-  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   invoiceId      String
-  invoice        PurchaseInvoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoice        PurchaseInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   itemId         String?
-  item           Item?             @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  item           Item?           @relation(fields: [itemId], references: [id], onDelete: SetNull)
   description    String
-  quantity       Decimal           @default(1) @db.Decimal(18, 3)
-  unitPrice      Decimal           @default(0) @db.Decimal(18, 2)
-  taxRate        Decimal           @default(0) @db.Decimal(5, 2)
-  discountPct    Decimal           @default(0) @db.Decimal(5, 2)
-  lineDiscount   Decimal           @default(0) @db.Decimal(18, 2)
-  lineAmount     Decimal           @default(0) @db.Decimal(18, 2)
-  lineTotal      Decimal           @default(0) @db.Decimal(18, 2)
-  taxAmount      Decimal           @default(0) @db.Decimal(18, 2)
-  sortOrder      Int               @default(0)
+  quantity       Decimal         @default(1) @db.Decimal(18, 3)
+  unitPrice      Decimal         @default(0) @db.Decimal(18, 2)
+  taxRate        Decimal         @default(0) @db.Decimal(5, 2)
+  discountPct    Decimal         @default(0) @db.Decimal(5, 2)
+  lineDiscount   Decimal         @default(0) @db.Decimal(18, 2)
+  lineAmount     Decimal         @default(0) @db.Decimal(18, 2)
+  lineTotal      Decimal         @default(0) @db.Decimal(18, 2)
+  taxAmount      Decimal         @default(0) @db.Decimal(18, 2)
+  sortOrder      Int             @default(0)
 
   @@index([invoiceId])
   @@index([itemId])
@@ -788,20 +792,20 @@ model PurchaseInvoiceSeq {
 /// debit, LIABILITY/EQUITY/INCOME credit) and the financial report grouping.
 /// Seeded automatically for every tenant at registration.
 model Account {
-  id             String      @id @default(uuid())
+  id             String       @id @default(uuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   code           String
   name           String
   type           AccountType
   parentId       String?
-  parent         Account?    @relation("AccountTree", fields: [parentId], references: [id], onDelete: SetNull)
-  children       Account[]   @relation("AccountTree")
+  parent         Account?     @relation("AccountTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children       Account[]    @relation("AccountTree")
   description    String?
-  active         Boolean     @default(true)
+  active         Boolean      @default(true)
   deletedAt      DateTime?
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
   createdBy      String?
   updatedBy      String?
 
@@ -828,10 +832,10 @@ model JournalEntry {
   sourceId       String?
   description    String?
   // The POSTED entry this entry reverses (null for normal entries).
-  reversalOfId   String?          @unique
-  reversalOf     JournalEntry?    @relation("JournalReversal", fields: [reversalOfId], references: [id], onDelete: SetNull)
+  reversalOfId   String?            @unique
+  reversalOf     JournalEntry?      @relation("JournalReversal", fields: [reversalOfId], references: [id], onDelete: SetNull)
   // The reversing entry (set on the original once cancelled).
-  reversedBy     JournalEntry?    @relation("JournalReversal")
+  reversedBy     JournalEntry?      @relation("JournalReversal")
   approvedBy     String?
   approvedAt     DateTime?
   createdBy      String?
@@ -880,26 +884,26 @@ model JournalEntrySeq {
 
 /// A quote to a customer. Can be converted to a sale invoice.
 model Quotation {
-  id              String           @id @default(uuid())
-  organizationId  String
-  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  quoteNumber     String
-  partyId         String
-  party           Party            @relation(fields: [partyId], references: [id])
-  quoteDate       DateTime         @default(now())
-  validUntil      DateTime?
-  status          QuotationStatus  @default(DRAFT)
-  subtotal        Decimal          @default(0) @db.Decimal(18, 2)
-  discountTotal   Decimal          @default(0) @db.Decimal(18, 2)
-  taxTotal        Decimal          @default(0) @db.Decimal(18, 2)
-  total           Decimal          @default(0) @db.Decimal(18, 2)
-  currency        String           @default("KES")
-  notes           String?
+  id                 String          @id @default(uuid())
+  organizationId     String
+  organization       Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quoteNumber        String
+  partyId            String
+  party              Party           @relation(fields: [partyId], references: [id])
+  quoteDate          DateTime        @default(now())
+  validUntil         DateTime?
+  status             QuotationStatus @default(DRAFT)
+  subtotal           Decimal         @default(0) @db.Decimal(18, 2)
+  discountTotal      Decimal         @default(0) @db.Decimal(18, 2)
+  taxTotal           Decimal         @default(0) @db.Decimal(18, 2)
+  total              Decimal         @default(0) @db.Decimal(18, 2)
+  currency           String          @default("KES")
+  notes              String?
   convertedInvoiceId String?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  createdBy       String?
-  updatedBy       String?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  createdBy          String?
+  updatedBy          String?
 
   lines QuotationLine[]
 
@@ -948,28 +952,28 @@ model QuotationNumberSeq {
 
 /// Purchase order with approval workflow. Supplier-facing procurement.
 model PurchaseOrder {
-  id              String              @id @default(uuid())
-  organizationId  String
-  organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  poNumber        String
-  partyId         String
-  party           Party               @relation(fields: [partyId], references: [id])
-  orderDate       DateTime            @default(now())
-  expectedDate    DateTime?
-  status          PurchaseOrderStatus @default(DRAFT)
-  subtotal        Decimal             @default(0) @db.Decimal(18, 2)
-  discountTotal   Decimal             @default(0) @db.Decimal(18, 2)
-  taxTotal        Decimal             @default(0) @db.Decimal(18, 2)
-  total           Decimal             @default(0) @db.Decimal(18, 2)
-  currency        String              @default("KES")
-  notes           String?
-  approvedBy      String?
-  approvedAt      DateTime?
-  rejectedReason  String?
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  createdBy       String?
-  updatedBy       String?
+  id             String              @id @default(uuid())
+  organizationId String
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  poNumber       String
+  partyId        String
+  party          Party               @relation(fields: [partyId], references: [id])
+  orderDate      DateTime            @default(now())
+  expectedDate   DateTime?
+  status         PurchaseOrderStatus @default(DRAFT)
+  subtotal       Decimal             @default(0) @db.Decimal(18, 2)
+  discountTotal  Decimal             @default(0) @db.Decimal(18, 2)
+  taxTotal       Decimal             @default(0) @db.Decimal(18, 2)
+  total          Decimal             @default(0) @db.Decimal(18, 2)
+  currency       String              @default("KES")
+  notes          String?
+  approvedBy     String?
+  approvedAt     DateTime?
+  rejectedReason String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  createdBy      String?
+  updatedBy      String?
 
   lines    PurchaseOrderLine[]
   receipts GoodsReceipt[]
@@ -981,24 +985,24 @@ model PurchaseOrder {
 }
 
 model PurchaseOrderLine {
-  id             String         @id @default(uuid())
+  id             String        @id @default(uuid())
   organizationId String
-  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   orderId        String
-  order          PurchaseOrder  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order          PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
   itemId         String?
-  item           Item?          @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  item           Item?         @relation(fields: [itemId], references: [id], onDelete: SetNull)
   description    String
-  quantity       Decimal        @default(1) @db.Decimal(18, 3)
-  receivedQty    Decimal        @default(0) @db.Decimal(18, 3)
-  unitPrice      Decimal        @default(0) @db.Decimal(18, 2)
-  taxRate        Decimal        @default(0) @db.Decimal(5, 2)
-  discountPct    Decimal        @default(0) @db.Decimal(5, 2)
-  lineDiscount   Decimal        @default(0) @db.Decimal(18, 2)
-  lineAmount     Decimal        @default(0) @db.Decimal(18, 2)
-  lineTotal      Decimal        @default(0) @db.Decimal(18, 2)
-  taxAmount      Decimal        @default(0) @db.Decimal(18, 2)
-  sortOrder      Int            @default(0)
+  quantity       Decimal       @default(1) @db.Decimal(18, 3)
+  receivedQty    Decimal       @default(0) @db.Decimal(18, 3)
+  unitPrice      Decimal       @default(0) @db.Decimal(18, 2)
+  taxRate        Decimal       @default(0) @db.Decimal(5, 2)
+  discountPct    Decimal       @default(0) @db.Decimal(5, 2)
+  lineDiscount   Decimal       @default(0) @db.Decimal(18, 2)
+  lineAmount     Decimal       @default(0) @db.Decimal(18, 2)
+  lineTotal      Decimal       @default(0) @db.Decimal(18, 2)
+  taxAmount      Decimal       @default(0) @db.Decimal(18, 2)
+  sortOrder      Int           @default(0)
 
   receipts GoodsReceiptLine[]
 
@@ -1022,19 +1026,19 @@ model PurchaseOrderNumberSeq {
 
 /// Goods receipt note — records actual delivery of goods against a purchase order.
 model GoodsReceipt {
-  id              String            @id @default(uuid())
+  id              String             @id @default(uuid())
   organizationId  String
-  organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   grnNumber       String
   purchaseOrderId String
-  purchaseOrder   PurchaseOrder     @relation(fields: [purchaseOrderId], references: [id])
+  purchaseOrder   PurchaseOrder      @relation(fields: [purchaseOrderId], references: [id])
   partyId         String
-  party           Party             @relation(fields: [partyId], references: [id])
-  receivedDate    DateTime          @default(now())
+  party           Party              @relation(fields: [partyId], references: [id])
+  receivedDate    DateTime           @default(now())
   status          GoodsReceiptStatus @default(DRAFT)
   notes           String?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
   createdBy       String?
   updatedBy       String?
 
@@ -1080,29 +1084,29 @@ model GoodsReceiptNumberSeq {
 
 /// First-class credit note document (customer returns / adjustments).
 model CreditNote {
-  id             String           @id @default(uuid())
-  organizationId String
-  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  noteNumber     String
-  partyId        String
-  party          Party            @relation(fields: [partyId], references: [id])
+  id                 String           @id @default(uuid())
+  organizationId     String
+  organization       Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  noteNumber         String
+  partyId            String
+  party              Party            @relation(fields: [partyId], references: [id])
   referenceInvoiceId String?
-  referenceInvoice SaleInvoice?   @relation(fields: [referenceInvoiceId], references: [id])
-  noteDate       DateTime         @default(now())
-  status         CreditNoteStatus @default(DRAFT)
-  subtotal       Decimal          @default(0) @db.Decimal(18, 2)
-  discountTotal  Decimal          @default(0) @db.Decimal(18, 2)
-  taxTotal       Decimal          @default(0) @db.Decimal(18, 2)
-  total          Decimal          @default(0) @db.Decimal(18, 2)
-  currency       String           @default("KES")
-  reason         String?
-  etimsCtrlNo    String?
-  etimsReceipt   String?
-  etimsSubmittedAt DateTime?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  createdBy      String?
-  updatedBy      String?
+  referenceInvoice   SaleInvoice?     @relation(fields: [referenceInvoiceId], references: [id])
+  noteDate           DateTime         @default(now())
+  status             CreditNoteStatus @default(DRAFT)
+  subtotal           Decimal          @default(0) @db.Decimal(18, 2)
+  discountTotal      Decimal          @default(0) @db.Decimal(18, 2)
+  taxTotal           Decimal          @default(0) @db.Decimal(18, 2)
+  total              Decimal          @default(0) @db.Decimal(18, 2)
+  currency           String           @default("KES")
+  reason             String?
+  etimsCtrlNo        String?
+  etimsReceipt       String?
+  etimsSubmittedAt   DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  createdBy          String?
+  updatedBy          String?
 
   lines CreditNoteLine[]
 
@@ -1177,22 +1181,22 @@ model BankAccount {
 
 /// Bank statement line imported for reconciliation.
 model BankStatementLine {
-  id               String            @id @default(uuid())
+  id               String              @id @default(uuid())
   organizationId   String
-  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization     Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   accountId        String
-  account          BankAccount       @relation(fields: [accountId], references: [id])
+  account          BankAccount         @relation(fields: [accountId], references: [id])
   transactionDate  DateTime
   description      String?
   reference        String?
-  debit            Decimal           @default(0) @db.Decimal(18, 2)
-  credit           Decimal           @default(0) @db.Decimal(18, 2)
-  reconciled       Boolean           @default(false)
+  debit            Decimal             @default(0) @db.Decimal(18, 2)
+  credit           Decimal             @default(0) @db.Decimal(18, 2)
+  reconciled       Boolean             @default(false)
   reconciledAt     DateTime?
   reconciledById   String?
   reconciliationId String?
   reconciliation   BankReconciliation? @relation(fields: [reconciliationId], references: [id])
-  createdAt        DateTime          @default(now())
+  createdAt        DateTime            @default(now())
 
   @@index([accountId, reconciled])
   @@index([organizationId])
@@ -1223,17 +1227,17 @@ model BankReconciliation {
 
 /// In-app notifications for users.
 model Notification {
-  id              String             @id @default(uuid())
-  organizationId  String
-  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  type            NotificationType   @default(CUSTOM)
-  status          NotificationStatus @default(UNREAD)
-  title           String
-  message         String?
-  referenceType   String?
-  referenceId     String?
-  metadata        Json?
-  createdAt       DateTime           @default(now())
+  id             String             @id @default(uuid())
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  type           NotificationType   @default(CUSTOM)
+  status         NotificationStatus @default(UNREAD)
+  title          String
+  message        String?
+  referenceType  String?
+  referenceId    String?
+  metadata       Json?
+  createdAt      DateTime           @default(now())
 
   @@index([organizationId, status])
   @@index([organizationId, createdAt(sort: Desc)])
@@ -1271,27 +1275,28 @@ enum ExpenseComplianceFlagType {
 /// An expense is only tax-deductible once its purchase is backed by one of
 /// these (KRA cross-validates returns against eTIMS records from 2025 YOI).
 model SupplierEtimsInvoice {
-  id                       String                      @id @default(uuid())
+  id                       String                          @id @default(uuid())
   organizationId           String
-  organization             Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization             Organization                    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   supplierId               String
-  supplier                 Party                       @relation(fields: [supplierId], references: [id])
+  supplier                 Party                           @relation(fields: [supplierId], references: [id])
   kraInvoiceNumber         String
   kraControlUnitId         String?
   kraQrCodeData            String?
   invoiceDate              DateTime
-  amount                   Decimal                     @default(0) @db.Decimal(18, 2)
-  vatAmount                Decimal                     @default(0) @db.Decimal(18, 2)
-  captureMethod            SupplierEtimsCaptureMethod  @default(MANUAL)
+  amount                   Decimal                         @default(0) @db.Decimal(18, 2)
+  vatAmount                Decimal                         @default(0) @db.Decimal(18, 2)
+  captureMethod            SupplierEtimsCaptureMethod      @default(MANUAL)
   matchedPurchaseInvoiceId String?
-  matchedPurchaseInvoice   PurchaseInvoice?            @relation(fields: [matchedPurchaseInvoiceId], references: [id], onDelete: SetNull)
-  matchStatus              SupplierEtimsMatchStatus    @default(UNMATCHED)
+  matchedPurchaseInvoice   PurchaseInvoice?                @relation(fields: [matchedPurchaseInvoiceId], references: [id], onDelete: SetNull)
+  matchStatus              SupplierEtimsMatchStatus        @default(UNMATCHED)
   verificationStatus       SupplierEtimsVerificationStatus @default(UNVERIFIED)
   attachmentUrl            String?
   ocrJobId                 String?
-  createdAt                DateTime                    @default(now())
-  updatedAt                DateTime                    @updatedAt
+  createdAt                DateTime                        @default(now())
+  updatedAt                DateTime                        @updatedAt
   deletedAt                DateTime?
+  supplierEtimsCreditNotes SupplierEtimsCreditNote[]
 
   @@index([organizationId])
   @@index([organizationId, matchStatus])
@@ -1300,20 +1305,62 @@ model SupplierEtimsInvoice {
   @@map("supplier_etims_invoices")
 }
 
+/// A KRA credit note (ETCR) issued by a supplier against a previously captured
+/// eTIMS invoice — a returned purchase reverses the deductible expense and, when
+/// a payment was already withheld, offsets the withholding to remit.
+model SupplierEtimsCreditNote {
+  id                        String                          @id @default(uuid())
+  organizationId            String
+  organization              Organization                    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  supplierId                String
+  supplier                  Party                           @relation(fields: [supplierId], references: [id])
+  kraInvoiceNumber          String
+  originalInvoiceNumber     String?
+  originalEtimsInvoiceId    String?
+  originalEtimsInvoice      SupplierEtimsInvoice?           @relation(fields: [originalEtimsInvoiceId], references: [id], onDelete: SetNull)
+  originalPurchaseInvoiceId String?
+  originalPurchaseInvoice   PurchaseInvoice?                @relation(fields: [originalPurchaseInvoiceId], references: [id], onDelete: SetNull)
+  creditNoteDate            DateTime
+  amount                    Decimal                         @default(0) @db.Decimal(18, 2)
+  vatAmount                 Decimal                         @default(0) @db.Decimal(18, 2)
+  totalAmount               Decimal                         @default(0) @db.Decimal(18, 2)
+  reason                    String?
+  captureMethod             SupplierEtimsCaptureMethod      @default(MANUAL)
+  matchStatus               SupplierEtimsMatchStatus        @default(UNMATCHED)
+  verificationStatus        SupplierEtimsVerificationStatus @default(UNVERIFIED)
+  kraQrCodeData             String?
+  attachmentUrl             String?
+  whtOffsetAmount           Decimal?                        @db.Decimal(18, 2)
+  whtOffsetDeductionId      String?
+  whtOffsetDeduction        WithholdingTaxDeduction?        @relation(fields: [whtOffsetDeductionId], references: [id], onDelete: SetNull)
+  createdAt                 DateTime                        @default(now())
+  updatedAt                 DateTime                        @updatedAt
+  deletedAt                 DateTime?
+
+  @@index([organizationId])
+  @@index([organizationId, matchStatus])
+  @@index([organizationId, supplierId])
+  @@index([organizationId, creditNoteDate])
+  @@index([organizationId, originalEtimsInvoiceId])
+  @@index([organizationId, originalPurchaseInvoiceId])
+  @@index([organizationId, whtOffsetDeductionId])
+  @@map("supplier_etims_credit_notes")
+}
+
 /// Accounts-payable compliance exposure. Created automatically for purchases
 /// that have no matched supplier eTIMS invoice, so owners can see "at-risk"
 /// spend instead of discovering it at year-end.
 model ExpenseComplianceFlag {
-  id                String                   @id @default(uuid())
+  id                String                    @id @default(uuid())
   organizationId    String
-  organization      Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization      Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   purchaseInvoiceId String
-  purchaseInvoice   PurchaseInvoice          @relation(fields: [purchaseInvoiceId], references: [id], onDelete: Cascade)
+  purchaseInvoice   PurchaseInvoice           @relation(fields: [purchaseInvoiceId], references: [id], onDelete: Cascade)
   flagType          ExpenseComplianceFlagType
-  amountMismatch    Decimal?                 @db.Decimal(18, 2)
+  amountMismatch    Decimal?                  @db.Decimal(18, 2)
   resolvedAt        DateTime?
   resolutionNote    String?
-  createdAt         DateTime                 @default(now())
+  createdAt         DateTime                  @default(now())
 
   @@index([organizationId, flagType])
   @@index([organizationId, purchaseInvoiceId])
@@ -1349,38 +1396,40 @@ enum WithholdingTaxDeductionStatus {
 /// Versioned WHT rate table. `organizationId` is null for KRA system defaults
 /// (5-30% depending on payment type/residency); tenants may override.
 model WithholdingTaxRate {
-  id            String                     @id @default(uuid())
+  id             String                    @id @default(uuid())
   organizationId String?
-  organization  Organization?              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  paymentType   WithholdingTaxPaymentType
-  residency     WithholdingTaxResidency    @default(RESIDENT)
-  ratePercent   Decimal                    @db.Decimal(5, 2)
-  effectiveFrom DateTime
-  effectiveTo   DateTime?
-  updatedAt     DateTime                   @updatedAt
+  organization   Organization?             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  paymentType    WithholdingTaxPaymentType
+  residency      WithholdingTaxResidency   @default(RESIDENT)
+  ratePercent    Decimal                   @db.Decimal(5, 2)
+  effectiveFrom  DateTime
+  effectiveTo    DateTime?
+  updatedAt      DateTime                  @updatedAt
 
   @@index([organizationId, paymentType, residency, effectiveFrom])
   @@map("withholding_tax_rates")
 }
 
 model WithholdingTaxDeduction {
-  id                     String                       @id @default(uuid())
-  organizationId         String
-  organization           Organization                 @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  supplierId             String
-  supplier               Party                        @relation(fields: [supplierId], references: [id])
-  supplierPaymentId      String?
-  supplierPayment        Payment?                     @relation(fields: [supplierPaymentId], references: [id], onDelete: SetNull)
-  paymentType            WithholdingTaxPaymentType    @default(PROFESSIONAL_FEES)
-  grossAmount            Decimal                      @db.Decimal(18, 2)
-  ratePercent            Decimal                      @db.Decimal(5, 2)
-  whtAmount              Decimal                      @db.Decimal(18, 2)
-  netPayableAmount       Decimal                      @db.Decimal(18, 2)
+  id                      String                        @id @default(uuid())
+  organizationId          String
+  organization            Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  supplierId              String
+  supplier                Party                         @relation(fields: [supplierId], references: [id])
+  supplierPaymentId       String?
+  supplierPayment         Payment?                      @relation(fields: [supplierPaymentId], references: [id], onDelete: SetNull)
+  paymentType             WithholdingTaxPaymentType     @default(PROFESSIONAL_FEES)
+  grossAmount             Decimal                       @db.Decimal(18, 2)
+  ratePercent             Decimal                       @db.Decimal(5, 2)
+  whtAmount               Decimal                       @db.Decimal(18, 2)
+  netPayableAmount        Decimal                       @db.Decimal(18, 2)
   kraWhtCertificateNumber String?
-  status                 WithholdingTaxDeductionStatus @default(CALCULATED)
-  remittanceDate         DateTime?
-  createdAt              DateTime                     @default(now())
-  updatedAt              DateTime                     @updatedAt
+  status                  WithholdingTaxDeductionStatus @default(CALCULATED)
+  remittanceDate          DateTime?
+  createdAt               DateTime                      @default(now())
+  updatedAt               DateTime                      @updatedAt
+
+  etimsCreditNotes SupplierEtimsCreditNote[]
 
   @@index([organizationId, status])
   @@index([organizationId, supplierId])
