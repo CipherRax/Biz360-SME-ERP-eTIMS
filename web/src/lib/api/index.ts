@@ -10,6 +10,8 @@ export {
   expenseExposureApi,
   withholdingTaxApi,
   supplierCreditApi,
+  supplierBulkApi,
+  reconciliationApi,
 } from './compliance';
 export { reportingApi } from './reporting';
 export {

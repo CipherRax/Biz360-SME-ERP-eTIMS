@@ -553,7 +553,7 @@ export interface StatementLine {
 }
 
 // ---- Kenya compliance (addendum Tier 1) -------------------------------------
-export type SupplierEtimsCaptureMethod = 'MANUAL' | 'SCAN' | 'OCR_SCAN' | 'BULK_IMPORT';
+export type SupplierEtimsCaptureMethod = 'MANUAL' | 'SCAN' | 'OCR_SCAN' | 'BULK_IMPORT' | 'SUPPLIER_PORTAL_SYNC';
 export type SupplierEtimsMatchStatus = 'UNMATCHED' | 'MATCHED' | 'DISPUTED';
 export type SupplierEtimsVerificationStatus =
   | 'UNVERIFIED'
@@ -705,4 +705,69 @@ export interface WhtRemittanceSummary {
     count: number;
   }>;
   pendingRemittance: WithholdingTaxDeduction[];
+}
+
+// ---- Tier 2: Upload queue + reconciliation --------------------------------
+
+export type SupplierEtimsUploadStatus = 'UPLOADED' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+export type SupplierEtimsUploadItemStatus = 'QUEUED' | 'PROCESSED' | 'DUPLICATE' | 'ERROR';
+
+export interface SupplierEtimsUpload {
+  id: string;
+  filename: string;
+  variant: string;
+  period?: string | null;
+  totalItems: number;
+  processedItems: number;
+  status: SupplierEtimsUploadStatus;
+  errorSummary?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SupplierEtimsUploadItem {
+  id: string;
+  rowIndex: number;
+  supplierTin?: string | null;
+  supplierName?: string | null;
+  kraInvoiceNumber?: string | null;
+  invoiceDate?: string | null;
+  amount?: number | null;
+  vatAmount?: number | null;
+  status: SupplierEtimsUploadItemStatus;
+  error?: string | null;
+  createdSupplierEtimsInvoiceId?: string | null;
+  processedAt?: string | null;
+}
+
+export interface PurchaseLedgerReconciliation {
+  summary: {
+    unpaidCount: number;
+    unpaidTotal: string;
+    voidedCount: number;
+    voidedWithEtimsCount: number;
+  };
+  unpaid: Array<{
+    purchaseInvoiceId: string;
+    invoiceNumber: string;
+    supplierId: string;
+    supplier: string;
+    supplierTaxId?: string | null;
+    invoiceDate: string;
+    dueDate?: string | null;
+    total: string;
+    amountPaid: string;
+    outstanding: string;
+    etimsMatched: boolean;
+    etimsMatchStatus?: string | null;
+  }>;
+  voided: Array<{
+    purchaseInvoiceId: string;
+    invoiceNumber: string;
+    supplier: string;
+    supplierTaxId?: string | null;
+    voidedAt?: string | null;
+    voidReason?: string | null;
+    etimsReceiptLinked: boolean;
+  }>;
 }

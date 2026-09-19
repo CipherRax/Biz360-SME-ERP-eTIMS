@@ -4,6 +4,7 @@ import {
   BarChart3,
   BookOpen,
   Boxes,
+  ClipboardList,
   FileWarning,
   LayoutDashboard,
   Package,
@@ -14,6 +15,7 @@ import {
   ShieldCheck,
   ShoppingCart,
   Truck,
+  Upload,
   Users,
 } from 'lucide-react';
 import type { Role } from '@/types/domain';
@@ -57,6 +59,18 @@ export const NAV_ITEMS: NavItem[] = [
     href: '/compliance/credits',
     label: 'Supplier Credit Notes',
     icon: BadgePercent,
+    roles: FINANCE,
+  },
+  {
+    href: '/compliance/uploads',
+    label: 'Bulk Import',
+    icon: Upload,
+    roles: FINANCE,
+  },
+  {
+    href: '/compliance/reconciliation',
+    label: 'Reconciliation',
+    icon: ClipboardList,
     roles: FINANCE,
   },
   { href: '/reports', label: 'Reports', icon: BarChart3, roles: FINANCE },

@@ -2,9 +2,13 @@ import { api } from './http';
 import type { CursorListParams } from './params';
 import type {
   EtimsExposureSummary,
+  PurchaseLedgerReconciliation,
   ScanJobStatus,
   ScanResult,
+  SupplierEtimsCreditNote,
   SupplierEtimsInvoice,
+  SupplierEtimsUpload,
+  SupplierEtimsUploadItem,
   UnmatchedExpense,
   WithholdingTaxDeduction,
   WhtComputeResult,
@@ -21,7 +25,6 @@ import type {
   ScanSupplierEtimsInput,
   UpsertWhtRateInput,
 } from '@/types/inputs';
-import type { SupplierEtimsCreditNote } from '@/types/domain';
 
 export interface UnmatchedExpenseParams extends CursorListParams {
   limit?: number;
@@ -121,4 +124,30 @@ export const withholdingTaxApi = {
     api.get<WhtRemittanceSummary>('/withholding-tax/remittance-summary', {
       query: { from, to },
     }),
+};
+
+/** Tier 2 – bulk upload (ETR XML) of supplier eTIMS invoices. */
+export const supplierBulkApi = {
+  upload: (input: { filename: string; xml: string }) =>
+    api.post<{ uploadId: string; totalItems: number; status: string; parseWarnings?: string[] }>(
+      '/etims/supplier-invoices/upload',
+      input,
+    ),
+  list: (params: CursorListParams = {}) =>
+    api.get<{ data: SupplierEtimsUpload[]; nextCursor?: string }>('/etims/supplier-invoices/upload', {
+      query: params,
+    }),
+  get: (id: string) => api.get<SupplierEtimsUpload>(`/etims/supplier-invoices/upload/${id}`),
+  items: (id: string, params: CursorListParams = {}) =>
+    api.get<{ data: SupplierEtimsUploadItem[]; nextCursor?: string }>(
+      `/etims/supplier-invoices/upload/${id}/items`,
+      { query: params },
+    ),
+  retry: (id: string) =>
+    api.post<{ uploadId: string; status: string }>(`/etims/supplier-invoices/upload/${id}/retry`),
+};
+
+/** Tier 2 – purchase ledger reconciliation (unpaid + voided vs eTIMS). */
+export const reconciliationApi = {
+  get: () => api.get<PurchaseLedgerReconciliation>('/etims/compliance/reconciliation'),
 };

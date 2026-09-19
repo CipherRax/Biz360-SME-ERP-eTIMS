@@ -37,6 +37,7 @@ enum OutboxEventType {
   ETIMS_SUPPLIER_OCR
   ETIMS_SUPPLIER_VERIFY
   ETIMS_SUPPLIER_CREDIT_VERIFY
+  ETIMS_BULK_IMPORT
   WEBHOOK
   NOTIFICATION
 }
@@ -240,6 +241,8 @@ model Organization {
   withholdingTaxRates      WithholdingTaxRate[]
   withholdingTaxDeductions WithholdingTaxDeduction[]
   supplierEtimsCreditNotes SupplierEtimsCreditNote[]
+  supplierEtimsUploads     SupplierEtimsUpload[]
+  supplierEtimsUploadItems SupplierEtimsUploadItem[]
 
   @@map("organizations")
 }
@@ -1250,6 +1253,7 @@ enum SupplierEtimsCaptureMethod {
   MANUAL
   OCR_SCAN
   SUPPLIER_PORTAL_SYNC
+  BULK_IMPORT
 }
 
 enum SupplierEtimsMatchStatus {
@@ -1296,6 +1300,8 @@ model SupplierEtimsInvoice {
   createdAt                DateTime                        @default(now())
   updatedAt                DateTime                        @updatedAt
   deletedAt                DateTime?
+
+  uploadItems              SupplierEtimsUploadItem[]
   supplierEtimsCreditNotes SupplierEtimsCreditNote[]
 
   @@index([organizationId])
@@ -1345,6 +1351,71 @@ model SupplierEtimsCreditNote {
   @@index([organizationId, originalPurchaseInvoiceId])
   @@index([organizationId, whtOffsetDeductionId])
   @@map("supplier_etims_credit_notes")
+}
+
+enum SupplierEtimsUploadStatus {
+  UPLOADED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum SupplierEtimsUploadItemStatus {
+  QUEUED
+  PROCESSED
+  DUPLICATE
+  ERROR
+}
+
+/// A bulk KRA eTIMS Returns (ETR) XML file uploaded so its supplier invoices
+/// can be reconciled into the ledger. Rows are queued and materialized by the
+/// outbox so large returns files don't block the request.
+model SupplierEtimsUpload {
+  id             String                    @id @default(uuid())
+  organizationId String
+  organization   Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  filename       String
+  variant        String                    @default("ETR")
+  period         String?
+  totalItems     Int                       @default(0)
+  processedItems Int                       @default(0)
+  status         SupplierEtimsUploadStatus @default(UPLOADED)
+  errorSummary   String?
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+
+  items SupplierEtimsUploadItem[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, createdAt])
+  @@map("supplier_etims_uploads")
+}
+
+model SupplierEtimsUploadItem {
+  id                            String                        @id @default(uuid())
+  organizationId                String
+  organization                  Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  uploadId                      String
+  upload                        SupplierEtimsUpload           @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  rowIndex                      Int
+  supplierTin                   String?
+  supplierName                  String?
+  kraInvoiceNumber              String?
+  invoiceDate                   DateTime?
+  amount                        Decimal?                      @db.Decimal(18, 2)
+  vatAmount                     Decimal?                      @db.Decimal(18, 2)
+  rawRecord                     String?
+  status                        SupplierEtimsUploadItemStatus @default(QUEUED)
+  error                         String?
+  createdSupplierEtimsInvoiceId String?
+  createdSupplierEtimsInvoice   SupplierEtimsInvoice?         @relation(fields: [createdSupplierEtimsInvoiceId], references: [id], onDelete: SetNull)
+  createdAt                     DateTime                      @default(now())
+  processedAt                   DateTime?
+
+  @@index([uploadId])
+  @@index([organizationId, status])
+  @@index([organizationId, supplierTin])
+  @@map("supplier_etims_upload_items")
 }
 
 /// Accounts-payable compliance exposure. Created automatically for purchases

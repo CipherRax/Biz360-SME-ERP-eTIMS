@@ -93,6 +93,52 @@ export class SupplierEtimsController {
     this.require(user);
     return this.service.unmatched(user.orgId, limit, cursor);
   }
+
+  // ---- Bulk upload (ETR XML) ----
+
+  @Post('upload')
+  upload(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() body: { filename: string; xml: string },
+  ) {
+    this.require(user);
+    if (!body.xml) throw new BadRequestException('xml body is required');
+    return this.service.createUpload(user.orgId, body.filename ?? 'upload.xml', body.xml);
+  }
+
+  @Get('upload')
+  listUploads(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('limit', new ParseIntPipe({ optional: true })) limit = 20,
+    @Query('cursor') cursor?: string,
+  ) {
+    this.require(user);
+    return this.service.listUploads(user.orgId, limit, cursor);
+  }
+
+  @Get('upload/:id')
+  getUpload(@CurrentUser() user: AuthenticatedUser, @Param('id', new ParseUUIDPipe()) id: string) {
+    this.require(user);
+    return this.service.getUpload(user.orgId, id);
+  }
+
+  @Get('upload/:id/items')
+  getUploadItems(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query('limit', new ParseIntPipe({ optional: true })) limit = 100,
+    @Query('cursor') cursor?: string,
+  ) {
+    this.require(user);
+    return this.service.getUploadItems(user.orgId, id, limit, cursor);
+  }
+
+  @Post('upload/:id/retry')
+  @Audit('SupplierEtimsUpload')
+  retryUpload(@CurrentUser() user: AuthenticatedUser, @Param('id', new ParseUUIDPipe()) id: string) {
+    this.require(user);
+    return this.service.retryUpload(user.orgId, id);
+  }
 }
 
 @ApiTags('compliance')
@@ -105,6 +151,12 @@ export class ExpenseExposureController {
   exposure(@CurrentUser() user: AuthenticatedUser) {
     if (!user) throw new BadRequestException('Not authenticated');
     return this.service.exposureSummary(user.orgId);
+  }
+
+  @Get('reconciliation')
+  reconciliation(@CurrentUser() user: AuthenticatedUser) {
+    if (!user) throw new BadRequestException('Not authenticated');
+    return this.service.reconciliation(user.orgId);
   }
 }
 

@@ -1,11 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { SupplierEtimsVerificationStatus } from '../../../generated/prisma/client.js';
+import {
+  Prisma,
+  SupplierEtimsCaptureMethod,
+  SupplierEtimsMatchStatus,
+  SupplierEtimsUploadItemStatus,
+  SupplierEtimsUploadStatus,
+  SupplierEtimsVerificationStatus,
+} from '../../../generated/prisma/client.js';
 import { OutboxDispatchContext, OutboxDispatcher } from '../../../events/outbox/outbox.dispatcher.js';
 import { PrismaService } from '../../../prisma/prisma.service.js';
 
 type Payload = {
   invoiceId?: string | null;
   creditNoteId?: string | null;
+  uploadId?: string | null;
   jobId?: string | null;
   fileKey?: string | null;
   kraQrCodeData?: string | null;
@@ -39,6 +47,9 @@ export class SupplierEtimsHandlerRegistrar {
     });
     this.dispatcher.register('ETIMS_SUPPLIER_CREDIT_VERIFY', {
       handle: (payload, context) => this.verifyCredit(payload as Payload, context),
+    });
+    this.dispatcher.register('ETIMS_BULK_IMPORT', {
+      handle: (payload, context) => this.bulkImport(payload as Payload, context),
     });
   }
 
@@ -94,5 +105,96 @@ export class SupplierEtimsHandlerRegistrar {
         selfConsistent ? 'VERIFIED_VIA_KRA_QR (self-checked)' : 'VERIFICATION_FAILED'
       }`,
     );
+  }
+
+  private async bulkImport(payload: Payload, context: OutboxDispatchContext): Promise<void> {
+    if (!payload.uploadId) return;
+    this.logger.log(`[bulk-import] processing upload ${payload.uploadId}`);
+
+    const upload = await this.prisma.client.supplierEtimsUpload.findFirst({
+      where: { id: payload.uploadId, organizationId: context.organizationId },
+      select: { id: true, status: true },
+    });
+    if (!upload || upload.status === SupplierEtimsUploadStatus.COMPLETED) return;
+
+    await this.prisma.client.supplierEtimsUpload.update({
+      where: { id: payload.uploadId },
+      data: { status: SupplierEtimsUploadStatus.PROCESSING },
+    });
+
+    const items = await this.prisma.client.supplierEtimsUploadItem.findMany({
+      where: { uploadId: payload.uploadId, status: SupplierEtimsUploadItemStatus.QUEUED },
+      orderBy: { rowIndex: 'asc' },
+      take: 500,
+    });
+
+    let processed = 0;
+    let errored = 0;
+
+    for (const item of items) {
+      try {
+        if (!item.kraInvoiceNumber) throw new Error('Missing KRA invoice number');
+        if (!item.supplierTin) throw new Error('Missing supplier TIN');
+
+        const dup = await this.prisma.client.supplierEtimsInvoice.findFirst({
+          where: { organizationId: context.organizationId, kraInvoiceNumber: item.kraInvoiceNumber, deletedAt: null },
+          select: { id: true },
+        });
+        if (dup) {
+          await this.prisma.client.supplierEtimsUploadItem.update({
+            where: { id: item.id },
+            data: { status: SupplierEtimsUploadItemStatus.DUPLICATE, error: `Duplicate: invoice ${item.kraInvoiceNumber} already exists`, processedAt: new Date() },
+          });
+          processed++;
+          continue;
+        }
+
+        const supplier = await this.prisma.client.party.findFirst({
+          where: { organizationId: context.organizationId, taxId: item.supplierTin, type: { not: 'CUSTOMER' as any } },
+          select: { id: true },
+        });
+        if (!supplier) throw new Error(`No supplier party with TIN ${item.supplierTin}`);
+
+        const invoice = await this.prisma.client.supplierEtimsInvoice.create({
+          data: {
+            organizationId: context.organizationId,
+            supplierId: supplier.id,
+            kraInvoiceNumber: item.kraInvoiceNumber,
+            invoiceDate: item.invoiceDate ?? new Date(),
+            amount: item.amount ?? new Prisma.Decimal(0),
+            vatAmount: item.vatAmount ?? new Prisma.Decimal(0),
+            captureMethod: SupplierEtimsCaptureMethod.BULK_IMPORT,
+            matchStatus: SupplierEtimsMatchStatus.UNMATCHED,
+            verificationStatus: SupplierEtimsVerificationStatus.UNVERIFIED,
+          },
+          select: { id: true },
+        });
+
+        await this.prisma.client.supplierEtimsUploadItem.update({
+          where: { id: item.id },
+          data: { status: SupplierEtimsUploadItemStatus.PROCESSED, createdSupplierEtimsInvoiceId: invoice.id, processedAt: new Date() },
+        });
+        processed++;
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        this.logger.warn(`[bulk-import] item ${item.rowIndex} failed: ${message}`);
+        await this.prisma.client.supplierEtimsUploadItem.update({
+          where: { id: item.id },
+          data: { status: SupplierEtimsUploadItemStatus.ERROR, error: message, processedAt: new Date() },
+        });
+        errored++;
+      }
+    }
+
+    await this.prisma.client.supplierEtimsUpload.update({
+      where: { id: payload.uploadId },
+      data: {
+        processedItems: { increment: processed },
+        status: SupplierEtimsUploadStatus.COMPLETED,
+        errorSummary: errored > 0 ? `${errored} item(s) failed processing` : null,
+      },
+    });
+
+    this.logger.log(`[bulk-import] upload ${payload.uploadId}: ${processed} processed, ${errored} errors`);
   }
 }

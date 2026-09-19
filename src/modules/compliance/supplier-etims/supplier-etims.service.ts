@@ -2,16 +2,21 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { XMLParser } from 'fast-xml-parser';
 import {
   ExpenseComplianceFlagType,
+  InvoiceStatus,
   Prisma,
   SupplierEtimsCaptureMethod,
   SupplierEtimsMatchStatus,
+  SupplierEtimsUploadItemStatus,
+  SupplierEtimsUploadStatus,
   SupplierEtimsVerificationStatus,
 } from '../../../generated/prisma/client.js';
 import { PrismaService } from '../../../prisma/prisma.service.js';
@@ -68,6 +73,8 @@ const SUPPLIER_ETIMS_CREDIT_FIELDS = {
 
 @Injectable()
 export class SupplierEtimsService {
+  private readonly logger = new Logger(SupplierEtimsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly outbox: OutboxService,
@@ -635,6 +642,407 @@ export class SupplierEtimsService {
     return {
       data: items,
       nextCursor: items.length === take ? items[items.length - 1]?.id : undefined,
+    };
+  }
+
+  /* ------------------------- Bulk upload (ETR XML) ------------------------- */
+
+  private static readonly xmlParser = new XMLParser({
+    ignoreAttributes: false,
+    parseTagValue: false,
+    trimValues: true,
+  });
+
+  private static parseETRXml(xml: string) {
+    const doc = SupplierEtimsService.xmlParser.parse(xml);
+    const etr = doc.ETR ?? doc.etr;
+    if (!etr) throw new BadRequestException('XML root must be an <ETR> element');
+    const period = etr.period ?? etr.PERIOD ?? null;
+    const raw = etr.invoice ?? etr.INVOICE ?? [];
+    const invoices = Array.isArray(raw) ? raw : [raw];
+    return {
+      period: period as string | null,
+      invoices: invoices.map((i: Record<string, string>, idx: number) => ({
+        rowIndex: idx + 1,
+        tin: (i.tin ?? i.TIN ?? i.supplierTin ?? '').trim().toUpperCase(),
+        name: (i.name ?? i.NAME ?? i.supplierName ?? '').trim(),
+        invoiceNo: (i.invoiceNo ?? i.invoiceNumber ?? i.KRAInvoiceNo ?? '').trim().toUpperCase(),
+        date: i.date ?? i.invoiceDate ?? i.KRAInvoiceDate ?? null,
+        amount: String(i.amount ?? i.total ?? i.invoiceAmount ?? '0').trim(),
+        vat: String(i.vat ?? i.vatAmount ?? i.VAT ?? '0').trim(),
+      })),
+    };
+  }
+
+  private static validateETRInvoice(
+    inv: { rowIndex: number; tin: string; invoiceNo: string; amount: string; vat: string },
+    errors: string[],
+  ) {
+    if (!inv.tin) errors.push(`Row ${inv.rowIndex}: supplier TIN is required`);
+    if (!/^[A-Za-z0-9\/\-\s]{6,60}$/.test(inv.invoiceNo))
+      errors.push(`Row ${inv.rowIndex}: invalid KRA invoice number ${inv.invoiceNo}`);
+    if (!/^\d{1,9}(\.\d{1,2})?$/.test(inv.amount))
+      errors.push(`Row ${inv.rowIndex}: invalid amount ${inv.amount}`);
+    if (!/^\d{1,9}(\.\d{1,2})?$/.test(inv.vat))
+      errors.push(`Row ${inv.rowIndex}: invalid VAT amount ${inv.vat}`);
+  }
+
+  /** Parse an ETR XML file, create a SupplierEtimsUpload + queued items, enqueue processing. */
+  async createUpload(organizationId: string, filename: string, xml: string) {
+    const { period, invoices } = SupplierEtimsService.parseETRXml(xml);
+
+    const errors: string[] = [];
+    const valid: typeof invoices = [];
+    for (const inv of invoices) {
+      SupplierEtimsService.validateETRInvoice(inv, errors);
+      if (errors.length === 0 || errors.filter((e) => e.startsWith(`Row ${inv.rowIndex}`)).length === 0) {
+        valid.push(inv);
+      }
+    }
+    if (errors.length > 0 && valid.length === 0) {
+      throw new BadRequestException(`ETR XML parse failed: ${errors.join('; ')}`);
+    }
+
+    const upload = await this.prisma.client.supplierEtimsUpload.create({
+      data: {
+        organizationId,
+        filename,
+        period,
+        totalItems: valid.length,
+        processedItems: 0,
+        status: SupplierEtimsUploadStatus.UPLOADED,
+        errorSummary: errors.length > 0 ? errors.join('\n') : null,
+        items: {
+          create: valid.map((inv) => ({
+            organizationId,
+            rowIndex: inv.rowIndex,
+            supplierTin: inv.tin || null,
+            supplierName: inv.name || null,
+            kraInvoiceNumber: inv.invoiceNo || null,
+            invoiceDate: inv.date ? new Date(inv.date) : null,
+            amount: new Prisma.Decimal(inv.amount),
+            vatAmount: new Prisma.Decimal(inv.vat),
+            rawRecord: JSON.stringify(inv),
+            status: SupplierEtimsUploadItemStatus.QUEUED,
+          })),
+        },
+      },
+      select: {
+        id: true,
+        filename: true,
+        period: true,
+        totalItems: true,
+        processedItems: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+
+    await this.outbox.enqueue(this.prisma.client, {
+      type: 'ETIMS_BULK_IMPORT',
+      aggregateType: 'SUPPLIER_ETIMS_UPLOAD',
+      aggregateId: upload.id,
+      payload: { uploadId: upload.id },
+      organizationId,
+    });
+
+    return {
+      uploadId: upload.id,
+      totalItems: upload.totalItems,
+      status: upload.status,
+      parseWarnings: errors.length > 0 ? errors : undefined,
+    };
+  }
+
+  async getUpload(organizationId: string, id: string) {
+    const upload = await this.prisma.client.supplierEtimsUpload.findFirst({
+      where: { id, organizationId },
+      select: {
+        id: true,
+        filename: true,
+        variant: true,
+        period: true,
+        totalItems: true,
+        processedItems: true,
+        status: true,
+        errorSummary: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    if (!upload) throw new NotFoundException('Upload not found');
+    return upload;
+  }
+
+  async listUploads(organizationId: string, limit = 20, cursor?: string) {
+    const take = Math.min(limit, 100);
+    const items = await this.prisma.client.supplierEtimsUpload.findMany({
+      where: { organizationId },
+      take,
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        filename: true,
+        period: true,
+        totalItems: true,
+        processedItems: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+    return {
+      data: items,
+      nextCursor: items.length === take ? items[items.length - 1]?.id : undefined,
+    };
+  }
+
+  async getUploadItems(organizationId: string, uploadId: string, limit = 100, cursor?: string) {
+    const upload = await this.prisma.client.supplierEtimsUpload.findFirst({
+      where: { id: uploadId, organizationId },
+      select: { id: true },
+    });
+    if (!upload) throw new NotFoundException('Upload not found');
+
+    const take = Math.min(limit, 200);
+    const items = await this.prisma.client.supplierEtimsUploadItem.findMany({
+      where: { uploadId },
+      take,
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      orderBy: { rowIndex: 'asc' },
+      select: {
+        id: true,
+        rowIndex: true,
+        supplierTin: true,
+        supplierName: true,
+        kraInvoiceNumber: true,
+        invoiceDate: true,
+        amount: true,
+        vatAmount: true,
+        status: true,
+        error: true,
+        createdSupplierEtimsInvoiceId: true,
+        processedAt: true,
+      },
+    });
+    return {
+      data: items,
+      nextCursor: items.length === take ? items[items.length - 1]?.id : undefined,
+    };
+  }
+
+  /** Re-enqueue items that errored so the outbox handler can try again. */
+  async retryUpload(organizationId: string, uploadId: string) {
+    const upload = await this.prisma.client.supplierEtimsUpload.findFirst({
+      where: { id: uploadId, organizationId },
+      select: { id: true, status: true },
+    });
+    if (!upload) throw new NotFoundException('Upload not found');
+    if (upload.status === SupplierEtimsUploadStatus.UPLOADED) {
+      throw new ConflictException('Upload is still being processed');
+    }
+
+    const updated = await this.prisma.client.$transaction(async (tx) => {
+      await tx.supplierEtimsUploadItem.updateMany({
+        where: { uploadId, status: SupplierEtimsUploadItemStatus.ERROR },
+        data: { status: SupplierEtimsUploadItemStatus.QUEUED, error: null },
+      });
+      return tx.supplierEtimsUpload.update({
+        where: { id: uploadId },
+        data: { status: SupplierEtimsUploadStatus.UPLOADED, errorSummary: null },
+        select: { id: true, status: true },
+      });
+    });
+
+    await this.outbox.enqueue(this.prisma.client, {
+      type: 'ETIMS_BULK_IMPORT',
+      aggregateType: 'SUPPLIER_ETIMS_UPLOAD',
+      aggregateId: uploadId,
+      payload: { uploadId },
+      organizationId,
+    });
+
+    return { uploadId: updated.id, status: updated.status };
+  }
+
+  /** Process queued items from an ETR XML upload into SupplierEtimsInvoices. */
+  async processUploadItems(uploadId: string, organizationId: string) {
+    const upload = await this.prisma.client.supplierEtimsUpload.findFirst({
+      where: { id: uploadId, organizationId },
+      select: { id: true, status: true },
+    });
+    if (!upload) return;
+    if (upload.status === SupplierEtimsUploadStatus.COMPLETED) return;
+
+    await this.prisma.client.supplierEtimsUpload.update({
+      where: { id: uploadId },
+      data: { status: SupplierEtimsUploadStatus.PROCESSING },
+    });
+
+    const items = await this.prisma.client.supplierEtimsUploadItem.findMany({
+      where: { uploadId, status: SupplierEtimsUploadItemStatus.QUEUED },
+      orderBy: { rowIndex: 'asc' },
+      take: 500,
+    });
+
+    let processed = 0;
+    let errored = 0;
+
+    for (const item of items) {
+      try {
+        if (!item.kraInvoiceNumber) throw new Error('Missing KRA invoice number');
+        if (!item.supplierTin) throw new Error('Missing supplier TIN');
+
+        const dup = await this.prisma.client.supplierEtimsInvoice.findFirst({
+          where: { organizationId, kraInvoiceNumber: item.kraInvoiceNumber, deletedAt: null },
+          select: { id: true },
+        });
+        if (dup) {
+          await this.prisma.client.supplierEtimsUploadItem.update({
+            where: { id: item.id },
+            data: {
+              status: SupplierEtimsUploadItemStatus.DUPLICATE,
+              error: `Duplicate: invoice ${item.kraInvoiceNumber} already exists`,
+              processedAt: new Date(),
+            },
+          });
+          processed++;
+          continue;
+        }
+
+        const supplier = await this.prisma.client.party.findFirst({
+          where: { organizationId, taxId: item.supplierTin, type: { not: 'CUSTOMER' } },
+          select: { id: true },
+        });
+        if (!supplier) {
+          throw new Error(`No supplier party with TIN ${item.supplierTin}`);
+        }
+
+        const invoice = await this.prisma.client.supplierEtimsInvoice.create({
+          data: {
+            organizationId,
+            supplierId: supplier.id,
+            kraInvoiceNumber: item.kraInvoiceNumber,
+            invoiceDate: item.invoiceDate ?? new Date(),
+            amount: item.amount ?? new Prisma.Decimal(0),
+            vatAmount: item.vatAmount ?? new Prisma.Decimal(0),
+            captureMethod: SupplierEtimsCaptureMethod.BULK_IMPORT,
+            matchStatus: SupplierEtimsMatchStatus.UNMATCHED,
+            verificationStatus: SupplierEtimsVerificationStatus.UNVERIFIED,
+          },
+          select: { id: true },
+        });
+
+        await this.prisma.client.supplierEtimsUploadItem.update({
+          where: { id: item.id },
+          data: {
+            status: SupplierEtimsUploadItemStatus.PROCESSED,
+            createdSupplierEtimsInvoiceId: invoice.id,
+            processedAt: new Date(),
+          },
+        });
+        processed++;
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        this.logger.warn(`[bulk-import] item ${item.rowIndex} failed: ${message}`);
+        await this.prisma.client.supplierEtimsUploadItem.update({
+          where: { id: item.id },
+          data: { status: SupplierEtimsUploadItemStatus.ERROR, error: message, processedAt: new Date() },
+        });
+        errored++;
+      }
+    }
+
+    const finalStatus = errored > 0
+      ? SupplierEtimsUploadStatus.COMPLETED
+      : SupplierEtimsUploadStatus.COMPLETED;
+
+    await this.prisma.client.supplierEtimsUpload.update({
+      where: { id: uploadId },
+      data: {
+        processedItems: { increment: processed },
+        status: finalStatus,
+        errorSummary: errored > 0 ? `${errored} item(s) failed processing` : null,
+      },
+    });
+
+    this.logger.log(`[bulk-import] upload ${uploadId}: ${processed} processed, ${errored} errors`);
+  }
+
+  /* ------------------------- Reconciliation ------------------------- */
+
+  async reconciliation(organizationId: string) {
+    const allNonVoid = await this.prisma.client.purchaseInvoice.findMany({
+      where: {
+        organizationId,
+        status: { notIn: [InvoiceStatus.VOID] },
+      },
+      orderBy: { invoiceDate: 'desc' },
+      select: {
+        id: true,
+        invoiceNumber: true,
+        partyId: true,
+        party: { select: { id: true, name: true, taxId: true } },
+        invoiceDate: true,
+        dueDate: true,
+        total: true,
+        amountPaid: true,
+        status: true,
+        voidedAt: true,
+        voidReason: true,
+        supplierEtimsInvoices: { select: { id: true, matchStatus: true }, take: 1 },
+      },
+    });
+
+    const unpaid = allNonVoid.filter((r) => r.amountPaid.lt(r.total));
+    const voided = await this.prisma.client.purchaseInvoice.findMany({
+      where: { organizationId, status: InvoiceStatus.VOID },
+      orderBy: { voidedAt: 'desc' },
+      select: {
+        id: true,
+        invoiceNumber: true,
+        party: { select: { id: true, name: true, taxId: true } },
+        voidedAt: true,
+        voidReason: true,
+        supplierEtimsInvoices: { select: { id: true }, take: 1 },
+      },
+    });
+
+    const unpaidCount = unpaid.length;
+    const unpaidTotal = unpaid.reduce((a, r) => a.add(r.total), new Prisma.Decimal(0));
+    const voidedCount = voided.length;
+    const voidedWithEtimsCount = voided.filter((v) => v.supplierEtimsInvoices.length > 0).length;
+
+    return {
+      summary: {
+        unpaidCount,
+        unpaidTotal: unpaidTotal.toFixed(2),
+        voidedCount,
+        voidedWithEtimsCount,
+      },
+      unpaid: unpaid.map((r) => ({
+        purchaseInvoiceId: r.id,
+        invoiceNumber: r.invoiceNumber,
+        supplierId: r.partyId,
+        supplier: r.party.name,
+        supplierTaxId: r.party.taxId,
+        invoiceDate: r.invoiceDate,
+        dueDate: r.dueDate,
+        total: r.total.toFixed(2),
+        amountPaid: r.amountPaid.toFixed(2),
+        outstanding: r.total.sub(r.amountPaid).toFixed(2),
+        etimsMatched: r.supplierEtimsInvoices.length > 0,
+        etimsMatchStatus: r.supplierEtimsInvoices[0]?.matchStatus ?? null,
+      })),
+      voided: voided.map((r) => ({
+        purchaseInvoiceId: r.id,
+        invoiceNumber: r.invoiceNumber,
+        supplier: r.party.name,
+        supplierTaxId: r.party.taxId,
+        voidedAt: r.voidedAt,
+        voidReason: r.voidReason,
+        etimsReceiptLinked: r.supplierEtimsInvoices.length > 0,
+      })),
     };
   }
 }
