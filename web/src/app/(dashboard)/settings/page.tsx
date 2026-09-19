@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Building2, KeyRound, Plus, Settings2, Trash2, Users } from 'lucide-react';
+import { Building2, KeyRound, Plus, ReceiptText, Settings2, Trash2, Users } from 'lucide-react';
 import {
   Badge,
   Button,
@@ -29,7 +29,7 @@ import {
   TableWrapper,
   useToast,
 } from '@/components/ui';
-import { apiKeysApi, organizationsApi, usersApi } from '@/lib/api';
+import { accountingApi, apiKeysApi, organizationsApi, usersApi } from '@/lib/api';
 import { ApiError } from '@/lib/api/http';
 import { formatDate, formatDateTime } from '@/lib/utils/format';
 import { ROLE_LABEL, USER_STATUS } from '@/lib/utils/status';
