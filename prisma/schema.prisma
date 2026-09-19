@@ -38,6 +38,7 @@ enum OutboxEventType {
   ETIMS_SUPPLIER_VERIFY
   ETIMS_SUPPLIER_CREDIT_VERIFY
   ETIMS_BULK_IMPORT
+  TOT_PAYMENT_STK_PUSH
   WEBHOOK
   NOTIFICATION
 }
@@ -243,6 +244,8 @@ model Organization {
   supplierEtimsCreditNotes SupplierEtimsCreditNote[]
   supplierEtimsUploads     SupplierEtimsUpload[]
   supplierEtimsUploadItems SupplierEtimsUploadItem[]
+  taxProfile               OrganizationTaxProfile?
+  totFilingPeriods         TotFilingPeriod[]
 
   @@map("organizations")
 }
@@ -1506,4 +1509,53 @@ model WithholdingTaxDeduction {
   @@index([organizationId, supplierId])
   @@index([organizationId, createdAt])
   @@map("withholding_tax_deductions")
+}
+
+// ----------------------- Turnover Tax (ToT) mode (A3) ------------------------
+
+/// The tax regime a tenant operates under. Turning over to ToT simplifies the
+/// accounting surface (no VAT) and computes turnover-based tax per filing period.
+enum TaxRegime {
+  VAT_STANDARD
+  TURNOVER_TAX
+  EXEMPT
+}
+
+enum TotFilingPeriodStatus {
+  PENDING
+  PAID
+}
+
+/// Tenant-level tax regime. Created lazily; defaults to VAT_STANDARD.
+model OrganizationTaxProfile {
+  id             String       @id @default(uuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  taxRegime      TaxRegime    @default(VAT_STANDARD)
+  totRatePercent Decimal      @default(3) @db.Decimal(5, 2)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@map("organization_tax_profiles")
+}
+
+/// A computed ToT filing period. Turnover is aggregated from confirmed sales
+/// each time periods are listed, and the amount due paid via mobile money.
+model TotFilingPeriod {
+  id               String                @id @default(uuid())
+  organizationId   String
+  organization     Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  periodStart      DateTime
+  periodEnd        DateTime
+  grossTurnover    Decimal               @default(0) @db.Decimal(18, 2)
+  totDue           Decimal               @default(0) @db.Decimal(18, 2)
+  paymentStatus    TotFilingPeriodStatus @default(PENDING)
+  paymentReference String?
+  paidAt           DateTime?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  @@unique([organizationId, periodStart, periodEnd])
+  @@index([organizationId, paymentStatus])
+  @@map("tot_filing_periods")
 }

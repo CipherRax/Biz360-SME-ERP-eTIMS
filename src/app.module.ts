@@ -31,6 +31,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { EtimsModule } from './modules/etims/etims.module.js';
 import { ReportingModule } from './modules/reporting/reporting.module.js';
 import { AccountingModule } from './modules/accounting/accounting.module.js';
+import { TurnoverTaxModule } from './modules/accounting/turnover-tax/turnover-tax.module.js';
 import { BankingModule } from './modules/banking/banking.module.js';
 import { ComplianceModule } from './modules/compliance/compliance.module.js';
 import { HealthModule } from './health/health.module.js';
@@ -97,6 +98,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
     EtimsModule,
     ReportingModule,
     AccountingModule,
+    TurnoverTaxModule,
     BankingModule,
     ComplianceModule,
     HealthModule,

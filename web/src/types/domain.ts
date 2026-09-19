@@ -791,3 +791,41 @@ export interface DriftReport {
   drifts: DriftItem[];
   byType: Record<string, number>;
 }
+// ---- Turnover Tax (ToT) -----------------------------------------------------
+export type TaxRegime = 'VAT_STANDARD' | 'TURNOVER_TAX';
+export type TaxCalculationBasis = 'EXCLUDING_TURNOVER_TAX' | 'INCLUDING_TURNOVER_TAX';
+
+export interface TotTaxProfile {
+  id: string;
+  taxRegime: TaxRegime;
+  totRatePercent: number;
+  totRateString: string;
+  calculationBasis?: TaxCalculationBasis | null;
+  vatRatePercent: number;
+  vatRateString: string;
+  updatedAt: string;
+}
+
+export type TotFilingPeriodStatus = 'PENDING' | 'PAID';
+export interface TotFilingPeriod {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  grossTurnover: number;
+  exemptTurnover: number;
+  taxableTurnover: number;
+  totDue: number;
+  paymentStatus: TotFilingPeriodStatus;
+  paymentReference?: string | null;
+  paymentPhoneNumber?: string | null;
+  paidAt?: string | null;
+}
+
+export type ListTotPeriodsParams = {
+  from?: string;
+  to?: string;
+} & Record<string, string | undefined>;
+
+export interface PayTotPeriodInput {
+  phoneNumber?: string;
+}

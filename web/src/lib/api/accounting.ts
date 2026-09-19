@@ -5,7 +5,11 @@ import type {
   GeneralLedgerEntry,
   JournalEntry,
   ProfitLossReport,
+  TotTaxProfile,
+  TotFilingPeriod,
   TrialBalance,
+  ListTotPeriodsParams,
+  PayTotPeriodInput,
 } from '@/types/domain';
 import type { AccountInput, JournalEntryInput } from '@/types/inputs';
 
@@ -74,6 +78,17 @@ export const accountingApi = {
       api.get<{ from: string; to: string; entries: GeneralLedgerEntry[] }>(
         '/accounting/general-ledger',
         { query: params },
+      ),
+  },
+  tot: {
+    profile: { get: () => api.get<TotTaxProfile>('/settings/tax-profile') },
+    listPeriods: (params: ListTotPeriodsParams = {}) =>
+      api.get<TotFilingPeriod[]>('/accounting/tot/periods', { query: params }),
+    payPeriod: (periodId: string, input: PayTotPeriodInput, idempotencyKey?: string) =>
+      api.post<TotFilingPeriod>(
+        `/accounting/tot/periods/${periodId}/pay`,
+        input,
+        { idempotencyKey },
       ),
   },
 };

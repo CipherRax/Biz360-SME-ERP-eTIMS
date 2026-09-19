@@ -1,10 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { BookOpen, Scale, TrendingUp } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { BookOpen, ReceiptText, Scale, TrendingUp } from 'lucide-react';
 import {
   Badge,
+  Button,
   Card,
   CardContent,
   CardHeader,
@@ -22,18 +23,22 @@ import {
   TableWrapper,
 } from '@/components/ui';
 import { accountingApi } from '@/lib/api';
+import type { TotFilingPeriod } from '@/types/domain';
 import { formatMoney } from '@/lib/utils/format';
+import { newIdempotencyKey } from '@/lib/utils/idempotency';
 
-type Tab = 'accounts' | 'trial' | 'pl';
+type Tab = 'accounts' | 'trial' | 'pl' | 'tot';
 
 const TABS: Array<{ id: Tab; label: string; icon: typeof BookOpen }> = [
   { id: 'accounts', label: 'Chart of accounts', icon: BookOpen },
   { id: 'trial', label: 'Trial balance', icon: Scale },
   { id: 'pl', label: 'Profit & loss', icon: TrendingUp },
+  { id: 'tot', label: 'Turnover tax (ToT)', icon: ReceiptText },
 ];
 
 export default function AccountingPage() {
   const [tab, setTab] = useState<Tab>('accounts');
+  const queryClient = useQueryClient();
 
   const accounts = useQuery({
     queryKey: ['accounts'],
@@ -49,6 +54,23 @@ export default function AccountingPage() {
     queryKey: ['profit-loss'],
     queryFn: () => accountingApi.reports.profitLoss({}),
     enabled: tab === 'pl',
+  });
+  const totProfile = useQuery({
+    queryKey: ['tot-profile'],
+    queryFn: () => accountingApi.tot.profile.get(),
+    enabled: tab === 'tot',
+  });
+  const totPeriods = useQuery({
+    queryKey: ['tot-periods'],
+    queryFn: () => accountingApi.tot.listPeriods({}),
+    enabled: tab === 'tot',
+  });
+  const payTot = useMutation({
+    mutationFn: ({ period, phoneNumber }: { period: TotFilingPeriod; phoneNumber: string }) =>
+      accountingApi.tot.payPeriod(period.id, { phoneNumber }, newIdempotencyKey()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tot-periods'] });
+    },
   });
 
   return (
@@ -253,6 +275,115 @@ export default function AccountingPage() {
               <span className="font-sans text-xl font-bold tabular-nums text-brand-deep">
                 {formatMoney(pl.data?.netIncome ?? 0)}
               </span>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
+      {tab === 'tot' ? (
+        <div className="flex flex-col gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Turnover tax profile</CardTitle>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Badge tone={totProfile.data?.taxRegime === 'TURNOVER_TAX' ? 'warning' : 'neutral'}>
+                  {totProfile.data
+                    ? totProfile.data.taxRegime === 'TURNOVER_TAX'
+                      ? 'Turnover tax scheme'
+                      : 'VAT (standard) registration'
+                    : 'Loading profile…'}
+                </Badge>
+                {totProfile.data && <Badge tone="info">{totProfile.data.totRateString}</Badge>}
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <div className="flex flex-col">
+                  <span className="text-xs uppercase tracking-wide text-ink-500">ToT rate</span>
+                  <span className="mt-1 text-xl font-semibold tabular-nums text-ink-900">
+                    {totProfile.data?.totRateString ?? '—'}
+                  </span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs uppercase tracking-wide text-ink-500">VAT rate</span>
+                  <span className="mt-1 text-xl font-semibold tabular-nums text-ink-900">
+                    {totProfile.data?.vatRateString ?? '—'}
+                  </span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs uppercase tracking-wide text-ink-500">Basis</span>
+                  <span className="mt-1 text-lg font-medium text-ink-900">
+                    {totProfile.data?.calculationBasis === 'INCLUDING_TURNOVER_TAX'
+                      ? 'VAT-inclusive'
+                      : totProfile.data?.calculationBasis === 'EXCLUDING_TURNOVER_TAX'
+                        ? 'VAT/exclusive'
+                        : '—'}
+                  </span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs uppercase tracking-wide text-ink-500">Updated</span>
+                  <span className="mt-1 text-md font-medium tabular-nums text-ink-900">
+                    {totProfile.data
+                      ? new Date(totProfile.data.updatedAt).toLocaleDateString('en-KE')
+                      : '—'}
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Filing periods</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {totPeriods.isLoading ? (
+                <SkeletonTable rows={4} columns={4} />
+              ) : (totPeriods.data?.length ?? 0) === 0 ? (
+                <EmptyState title="No filing periods" description="Turnover tax periods will appear here once the KRA back-end generates them." />
+              ) : (
+                <TableWrapper>
+                  <Table>
+                    <TableHead>
+                      <tr>
+                        <TableHeaderCell>Period</TableHeaderCell>
+                        <TableHeaderCell className="text-right">Gross turnover</TableHeaderCell>
+                        <TableHeaderCell className="text-right">ToT due</TableHeaderCell>
+                        <TableHeaderCell>Status</TableHeaderCell>
+                        <TableHeaderCell className="text-right">Action</TableHeaderCell>
+                      </tr>
+                    </TableHead>
+                    <TableBody>
+                      {totPeriods.data?.map((period) => (
+                        <TableRow key={period.id}>
+                          <TableCell className="whitespace-nowrap">
+                            {new Date(period.periodStart).toLocaleDateString('en-KE')} – {new Date(period.periodEnd).toLocaleDateString('en-KE')}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">{formatMoney(period.grossTurnover)}</TableCell>
+                          <TableCell className="text-right tabular-nums font-semibold">{formatMoney(period.totDue)}</TableCell>
+                          <TableCell>
+                            <Badge tone={period.paymentStatus === 'PAID' ? 'success' : 'warning'}>
+                              {period.paymentStatus === 'PAID' ? 'Paid' : 'Pending'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {period.paymentStatus === 'PAID' ? (
+                              <span className="text-xs text-ink-500">Ref {period.paymentReference ?? '–'}</span>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                loading={payTot.isPending}
+                                onClick={() => payTot.mutate({ period, phoneNumber: '' })}
+                              >
+                                Pay now
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableWrapper>
+              )}
             </CardContent>
           </Card>
         </div>
