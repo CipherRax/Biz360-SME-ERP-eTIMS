@@ -6,12 +6,14 @@ export function HeroBand({
   description,
   children,
   className,
+  backgroundImage,
 }: {
   eyebrow?: string;
   title: string;
   description?: string;
   children?: React.ReactNode;
   className?: string;
+  backgroundImage?: string;
 }) {
   return (
     <div
@@ -28,6 +30,13 @@ export function HeroBand({
         className="pointer-events-none absolute -bottom-32 right-24 h-64 w-64 rounded-full bg-white/5"
         aria-hidden
       />
+      {backgroundImage ? (
+        <div
+          className="absolute inset-0 bg-cover bg-center opacity-20"
+          style={{ backgroundImage: `url(${backgroundImage})` }}
+          aria-hidden
+        />
+      ) : null}
       <div className="relative max-w-2xl">
         {eyebrow ? (
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-white/80">{eyebrow}</p>

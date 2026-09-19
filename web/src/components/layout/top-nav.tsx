@@ -3,12 +3,13 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Bell, ChevronDown, LogOut, Menu, ShieldCheck } from 'lucide-react';
+import { Bell, ChevronDown, LogOut, Menu } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils/cn';
 import { ROLE_LABEL } from '@/lib/utils/status';
 import { useAuth } from '@/lib/auth/auth-context';
 import { notificationsApi } from '@/lib/api';
+import { BrandMark } from '@/components/layout/brand-mark';
 import { UserAvatar } from '@/components/user-avatar';
 import { NAV_ITEMS } from './nav';
 
@@ -39,14 +40,7 @@ export function TopNav({ onOpenMenu }: { onOpenMenu?: () => void }) {
           <Menu className="h-5 w-5" />
         </button>
 
-        <Link href="/dashboard" className="flex items-center gap-2.5">
-          <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-brand text-white">
-            <ShieldCheck className="h-5 w-5" aria-hidden />
-          </span>
-          <span className="font-sans text-lg font-bold text-ink-900">
-            Biz<span className="text-brand">360</span>
-          </span>
-        </Link>
+        <BrandMark />
 
         <nav className="ml-4 hidden items-center gap-1 lg:flex" aria-label="Primary">
           {visible.map((item) => {

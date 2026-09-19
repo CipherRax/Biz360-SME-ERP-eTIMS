@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { BadgeCheck, BarChart3, ShieldCheck, Wallet } from 'lucide-react';
+import { BadgeCheck, BarChart3, Wallet } from 'lucide-react';
+import logo from '@/images/logo.png';
 
 const HIGHLIGHTS = [
   { icon: Wallet, text: 'Invoicing, payments and VAT in one ledger' },
@@ -16,9 +17,11 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           aria-hidden
         />
         <Link href="/" className="relative flex items-center gap-2.5">
-          <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white/15">
-            <ShieldCheck className="h-5 w-5" aria-hidden />
-          </span>
+          <span
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 bg-cover bg-center"
+            style={{ backgroundImage: `url(${logo.src})` }}
+            aria-hidden
+          />
           <span className="font-sans text-xl font-bold">
             Biz<span className="text-white/80">360</span>
           </span>
