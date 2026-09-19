@@ -16,6 +16,7 @@ import { CurrentUser } from '../../../common/decorators/current-user.decorator.j
 import type { AuthenticatedUser } from '../../../common/decorators/current-user.decorator.js';
 import { Audit } from '../../../common/decorators/audit.decorator.js';
 import { SupplierEtimsService } from './supplier-etims.service.js';
+import { EtimsDriftService } from './etims-drift.service.js';
 import {
   CreateSupplierEtimsCreditNoteDto,
   CreateSupplierEtimsInvoiceDto,
@@ -145,7 +146,10 @@ export class SupplierEtimsController {
 @ApiBearerAuth()
 @Controller('etims/compliance')
 export class ExpenseExposureController {
-  constructor(private readonly service: SupplierEtimsService) {}
+  constructor(
+    private readonly service: SupplierEtimsService,
+    private readonly driftService: EtimsDriftService,
+  ) {}
 
   @Get('exposure-summary')
   exposure(@CurrentUser() user: AuthenticatedUser) {
@@ -157,6 +161,12 @@ export class ExpenseExposureController {
   reconciliation(@CurrentUser() user: AuthenticatedUser) {
     if (!user) throw new BadRequestException('Not authenticated');
     return this.service.reconciliation(user.orgId);
+  }
+
+  @Get('drift-report')
+  driftReport(@CurrentUser() user: AuthenticatedUser) {
+    if (!user) throw new BadRequestException('Not authenticated');
+    return this.driftService.generateReport(user.orgId);
   }
 }
 

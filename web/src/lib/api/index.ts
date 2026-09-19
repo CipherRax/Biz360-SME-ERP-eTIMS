@@ -12,6 +12,7 @@ export {
   supplierCreditApi,
   supplierBulkApi,
   reconciliationApi,
+  driftApi,
 } from './compliance';
 export { reportingApi } from './reporting';
 export {

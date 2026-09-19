@@ -2,6 +2,7 @@ import { api } from './http';
 import type { CursorListParams } from './params';
 import type {
   EtimsExposureSummary,
+  DriftReport,
   PurchaseLedgerReconciliation,
   ScanJobStatus,
   ScanResult,
@@ -150,4 +151,9 @@ export const supplierBulkApi = {
 /** Tier 2 – purchase ledger reconciliation (unpaid + voided vs eTIMS). */
 export const reconciliationApi = {
   get: () => api.get<PurchaseLedgerReconciliation>('/etims/compliance/reconciliation'),
+};
+
+/** Tier 3 – drift report (verification + match staleness detection). */
+export const driftApi = {
+  get: () => api.get<DriftReport>('/etims/compliance/drift-report'),
 };

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   Prisma,
   SupplierEtimsCaptureMethod,
@@ -36,6 +36,8 @@ export class SupplierEtimsHandlerRegistrar {
   constructor(
     private readonly dispatcher: OutboxDispatcher,
     private readonly prisma: PrismaService,
+    @Inject('OcrProvider') private readonly ocrProvider: { extractInvoiceData: (fileKey: string, qrData?: string | null) => Promise<{ success: boolean; fields?: Record<string, string | undefined>; error?: string }> },
+    @Inject('KraVerificationProvider') private readonly kraVerificationProvider: { verifyInvoice: (qrData: string, opts?: { tin?: string; amount?: string }) => Promise<{ verified: boolean; reason?: string }> },
   ) {}
 
   onModuleInit(): void {
@@ -57,53 +59,118 @@ export class SupplierEtimsHandlerRegistrar {
     this.logger.log(
       `[ocr] job ${payload.jobId ?? context.aggregateId} for org ${context.organizationId}`,
     );
-    if (payload.invoiceId) {
-      // Placeholder until an OCR provider (OCR_PROVIDER_URL) is configured.
+    if (!payload.invoiceId) return;
+
+    const invoice = await this.prisma.client.supplierEtimsInvoice.findUnique({
+      where: { id: payload.invoiceId },
+      select: { id: true, kraQrCodeData: true, captureMethod: true },
+    });
+    if (!invoice) {
+      this.logger.warn(`[ocr] invoice ${payload.invoiceId} not found`);
+      return;
+    }
+
+    const result = await this.ocrProvider.extractInvoiceData(
+      payload.fileKey ?? '',
+      invoice.kraQrCodeData,
+    );
+
+    if (result.success && result.fields) {
+      await this.prisma.client.supplierEtimsInvoice.update({
+        where: { id: payload.invoiceId },
+        data: {
+          kraInvoiceNumber: result.fields.kraInvoiceNumber ?? undefined,
+          invoiceDate: result.fields.invoiceDate ? new Date(result.fields.invoiceDate) : undefined,
+          amount: result.fields.amount ? new Prisma.Decimal(result.fields.amount) : undefined,
+          vatAmount: result.fields.vatAmount ? new Prisma.Decimal(result.fields.vatAmount) : undefined,
+          kraQrCodeData: result.fields.kraQrCodeData ?? undefined,
+        },
+      });
+      this.logger.log(
+        `[ocr] org ${context.organizationId} invoice ${payload.invoiceId} extracted ${Object.keys(result.fields).length} fields`,
+      );
+    } else {
       this.logger.warn(
-        `[ocr] no OCR provider configured — job ${payload.jobId ?? context.aggregateId} completed without extraction`,
+        `[ocr] org ${context.organizationId} invoice ${payload.invoiceId} extraction failed: ${result.error}`,
       );
     }
   }
 
   private async verify(payload: Payload, context: OutboxDispatchContext): Promise<void> {
     if (!payload.invoiceId) return;
-    const qr = payload.kraQrCodeData;
-    // Best-effort self-consistency check until a live KRA verification
-    // provider is configured (see .env.example KRA_PIN_VERIFY_URL).
-    const selfConsistent = !!qr && qr.length >= 20;
+
+    const invoice = await this.prisma.client.supplierEtimsInvoice.findUnique({
+      where: { id: payload.invoiceId },
+      select: { kraQrCodeData: true, amount: true, supplier: { select: { taxId: true } } },
+    });
+    if (!invoice) return;
+
+    const qr = payload.kraQrCodeData ?? invoice.kraQrCodeData;
+    if (!qr) {
+      await this.prisma.client.supplierEtimsInvoice.update({
+        where: { id: payload.invoiceId },
+        data: { verificationStatus: SupplierEtimsVerificationStatus.VERIFICATION_FAILED },
+      });
+      return;
+    }
+
+    const result = await this.kraVerificationProvider.verifyInvoice(qr, {
+      tin: invoice.supplier?.taxId ?? undefined,
+      amount: invoice.amount?.toString() ?? undefined,
+    });
+
     await this.prisma.client.supplierEtimsInvoice.update({
       where: { id: payload.invoiceId },
       data: {
-        verificationStatus: selfConsistent
+        verificationStatus: result.verified
           ? SupplierEtimsVerificationStatus.VERIFIED_VIA_KRA_QR
           : SupplierEtimsVerificationStatus.VERIFICATION_FAILED,
-        ...(selfConsistent ? { kraQrCodeData: qr } : {}),
+        kraQrCodeData: qr,
       },
     });
     this.logger.log(
       `[verify] org ${context.organizationId} invoice ${payload.invoiceId} -> ${
-        selfConsistent ? 'VERIFIED_VIA_KRA_QR (self-checked)' : 'VERIFICATION_FAILED'
-      }`,
+        result.verified ? 'VERIFIED_VIA_KRA_QR' : 'VERIFICATION_FAILED'
+      } (${result.reason})`,
     );
   }
 
   private async verifyCredit(payload: Payload, context: OutboxDispatchContext): Promise<void> {
     if (!payload.creditNoteId) return;
-    const qr = payload.kraQrCodeData;
-    const selfConsistent = !!qr && qr.length >= 20;
+
+    const creditNote = await this.prisma.client.supplierEtimsCreditNote.findUnique({
+      where: { id: payload.creditNoteId },
+      select: { kraQrCodeData: true, totalAmount: true, supplier: { select: { taxId: true } } },
+    });
+    if (!creditNote) return;
+
+    const qr = payload.kraQrCodeData ?? creditNote.kraQrCodeData;
+    if (!qr) {
+      await this.prisma.client.supplierEtimsCreditNote.update({
+        where: { id: payload.creditNoteId },
+        data: { verificationStatus: SupplierEtimsVerificationStatus.VERIFICATION_FAILED },
+      });
+      return;
+    }
+
+    const result = await this.kraVerificationProvider.verifyInvoice(qr, {
+      tin: creditNote.supplier?.taxId ?? undefined,
+      amount: creditNote.totalAmount?.toString() ?? undefined,
+    });
+
     await this.prisma.client.supplierEtimsCreditNote.update({
       where: { id: payload.creditNoteId },
       data: {
-        verificationStatus: selfConsistent
+        verificationStatus: result.verified
           ? SupplierEtimsVerificationStatus.VERIFIED_VIA_KRA_QR
           : SupplierEtimsVerificationStatus.VERIFICATION_FAILED,
-        ...(selfConsistent ? { kraQrCodeData: qr } : {}),
+        kraQrCodeData: qr,
       },
     });
     this.logger.log(
       `[verify-credit] org ${context.organizationId} credit note ${payload.creditNoteId} -> ${
-        selfConsistent ? 'VERIFIED_VIA_KRA_QR (self-checked)' : 'VERIFICATION_FAILED'
-      }`,
+        result.verified ? 'VERIFIED_VIA_KRA_QR' : 'VERIFICATION_FAILED'
+      } (${result.reason})`,
     );
   }
 

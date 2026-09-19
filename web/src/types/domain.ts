@@ -771,3 +771,23 @@ export interface PurchaseLedgerReconciliation {
     etimsReceiptLinked: boolean;
   }>;
 }
+
+export type DriftType = 'UNVERIFIED' | 'MATCH_STALE' | 'MISSING_QR' | 'VERIFICATION_FAILED';
+
+export interface DriftItem {
+  invoiceId: string;
+  kraInvoiceNumber: string;
+  supplierName: string;
+  amount: string;
+  driftType: DriftType;
+  detail: string;
+  createdAt: string;
+}
+
+export interface DriftReport {
+  generatedAt: string;
+  totalInvoices: number;
+  driftCount: number;
+  drifts: DriftItem[];
+  byType: Record<string, number>;
+}

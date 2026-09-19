@@ -17,6 +17,7 @@ import {
   Truck,
   Upload,
   Users,
+  Radar,
 } from 'lucide-react';
 import type { Role } from '@/types/domain';
 
@@ -71,6 +72,12 @@ export const NAV_ITEMS: NavItem[] = [
     href: '/compliance/reconciliation',
     label: 'Reconciliation',
     icon: ClipboardList,
+    roles: FINANCE,
+  },
+  {
+    href: '/compliance/drift-report',
+    label: 'Drift Report',
+    icon: Radar,
     roles: FINANCE,
   },
   { href: '/reports', label: 'Reports', icon: BarChart3, roles: FINANCE },
