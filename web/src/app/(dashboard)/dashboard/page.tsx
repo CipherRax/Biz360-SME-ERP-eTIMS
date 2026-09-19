@@ -27,7 +27,6 @@ import {
   StatCard,
 } from '@/components/ui';
 import { HeroBand } from '@/components/layout/hero-band';
-import backgroud from '@/images/backgroud.png';
 import { reportingApi, salesApi } from '@/lib/api';
 import { formatDate, formatMoney, formatNumber } from '@/lib/utils/format';
 import { INVOICE_STATUS } from '@/lib/utils/status';
@@ -96,9 +95,7 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <HeroBand
-        backgroundImage={backgroud.src}
-        eyebrow={`Karibu${user?.email ? `, ${user.email.split('@')[0]}` : ''}`}
+      <HeroBand eyebrow={`Karibu${user?.email ? `, ${user.email.split('@')[0]}` : ''}`}
         title="Your business at a glance"
         description="Track sales, cash, stock and KRA eTIMS compliance from one dashboard."
       >
